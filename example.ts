@@ -1,11 +1,15 @@
-import { App, RequestMethod } from "./mod.ts";
+import { Serva, RequestMethod } from "./mod.ts";
 
-const a = new App();
+const app = new Serva();
 
-a.route([RequestMethod.GET], "/", (req) => {
-  req.respond({
-    body: "Hello, World!",
-  });
+app.use([RequestMethod.GET], "/", async (_, next) => {
+  console.log("entered");
+
+  await next();
+
+  console.log("exited");
 });
 
-a.serve({ port: 3333 });
+app.route([RequestMethod.GET], "/", () => "Hello, World!");
+
+app.serve({ port: 3333 });

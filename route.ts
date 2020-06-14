@@ -10,12 +10,6 @@ export enum RequestMethod {
   PATCH = "PATCH",
 }
 
-export class RouteExists extends Error {
-  public constructor(methods: RequestMethod[], path: string) {
-    super(`Route already exists for: [${methods}] ${path}`);
-  }
-}
-
 const registry = new Map<string, Route>();
 
 export class Route {
@@ -25,13 +19,6 @@ export class Route {
   private readonly keys: Key[];
   private readonly regexp: RegExp;
 
-  public static fresh(methods: RequestMethod[], path: string): Route {
-    if (registry.has(cacheKey(methods, path))) {
-      throw new RouteExists(methods, path);
-    }
-
-    return Route.for(methods, path);
-  }
   public static for(methods: RequestMethod[], path: string): Route {
     const key = cacheKey(methods, path);
     let route = registry.get(key);

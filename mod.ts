@@ -1,2 +1,2 @@
-export { App } from "./app.ts";
+export { Serva } from "./serva.ts";
 export { RequestMethod } from "./route.ts";

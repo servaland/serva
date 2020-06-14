@@ -5,6 +5,7 @@ export {
 
 export {
   HTTPOptions,
+  Response,
   Status,
   Server,
   ServerRequest,
