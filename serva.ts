@@ -13,7 +13,7 @@ interface MiddlewareCalback {
 }
 
 interface EndpointCallback {
-  (c: RequestContext): any;
+  (c: RequestContext, ...params: any[]): any;
 }
 
 class AlreadyServing extends Error {
@@ -85,6 +85,7 @@ export class Serva {
     }
 
     const [route, endpoint] = matched;
+    const params = route.params(url.pathname);
 
     const middleware = this.middleware.filter(([route]) =>
       route.test(request.method, url.pathname)
@@ -94,7 +95,7 @@ export class Serva {
 
     // add the endpoint to the stack
     callbacks.push(async (c, next) => {
-      const body = await endpoint(c); // endpoints don't go next
+      const body = await endpoint(c, ...params.map(([, v]) => v)); // endpoints don't go next
       if (body !== undefined) {
         c.response.body = body;
       }
