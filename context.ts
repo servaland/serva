@@ -29,7 +29,7 @@ export function createContext({
         /**
          * We listen for server request respond so we can let the app kow the
          * developer explicitly responded to the request. This is to stop any
-         * confusion between the context's respond method.
+         * confusion between the context's response.
          */
         case "respond":
           return function respond(r: Response): Promise<void> {
