@@ -1,14 +1,13 @@
 import { pathToRegexp, Key } from "./deps.ts";
 
-export enum RequestMethod {
-  GET = "GET",
-  HEAD = "HEAD",
-  POST = "POST",
-  PUT = "PET",
-  DELETE = "DELETE",
-  OPTIONS = "OPTIONS",
-  PATCH = "PATCH",
-}
+export type RequestMethod =
+  | "GET"
+  | "HEAD"
+  | "POST"
+  | "PUT"
+  | "DELETE"
+  | "OPTIONS"
+  | "PATCH";
 
 const registry = new Map<string, Route>();
 
@@ -49,8 +48,8 @@ export class Route {
     // check the method...
     const matched = this.methods.includes(method as RequestMethod) ||
       // ... allowing "HEAD" to valid as "GET"
-      (method === RequestMethod.HEAD &&
-        this.methods.includes(RequestMethod.GET));
+      (method === "HEAD" &&
+        this.methods.includes("GET"));
 
     return matched && this.regexp.test(path);
   }

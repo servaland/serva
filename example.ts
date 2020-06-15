@@ -1,8 +1,8 @@
-import { Serva, RequestMethod } from "./mod.ts";
+import { Serva } from "./mod.ts";
 
 const app = new Serva();
 
-app.use([RequestMethod.GET], "/*", async (__, next) => {
+app.use(["GET"], "/*", async (__, next) => {
   console.log("entered");
 
   await next();
@@ -10,9 +10,9 @@ app.use([RequestMethod.GET], "/*", async (__, next) => {
   console.log("exited");
 });
 
-app.route([RequestMethod.GET], "/", () => "Hello, World!");
+app.route(["GET"], "/", () => "Hello, World!");
 app.route(
-  [RequestMethod.GET],
+  ["GET"],
   "/hello/[name]",
   (__, name) => `Hello, ${name}!`,
 );
