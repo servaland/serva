@@ -2,7 +2,6 @@ import { pathToRegexp, Key } from "./deps.ts";
 
 export type RequestMethod =
   | "GET"
-  | "HEAD"
   | "POST"
   | "PUT"
   | "DELETE"

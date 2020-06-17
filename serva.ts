@@ -5,14 +5,15 @@ import {
   ServerRequest,
   serve,
 } from "./deps.ts";
-import { Route, RequestMethod } from "./route.ts";
-import { createContext, RequestContext } from "./context.ts";
+import { Route, RequestMethod } from "./_route.ts";
+import { createContext, RequestContext } from "./_context.ts";
+import { success } from "./_logger.ts";
 
-interface MiddlewareCalback {
+export interface MiddlewareCallback {
   (c: RequestContext, next: () => Promise<any>): any;
 }
 
-interface EndpointCallback {
+export interface EndpointCallback {
   (c: RequestContext, ...params: any[]): any;
 }
 
@@ -28,10 +29,29 @@ class RouteExists extends Error {
   }
 }
 
+export interface ServaOptions {
+  port?: number;
+  hostname?: string;
+}
+
+const defaults: ServaOptions = {
+  hostname: "0.0.0.0",
+  port: 3333,
+};
+
 export class Serva {
+  public readonly options: ServaOptions;
+
   private server: Server | null = null;
   private routes: [Route, EndpointCallback][] = [];
-  private middleware: [Route, MiddlewareCalback][] = [];
+  private middleware: [Route, MiddlewareCallback][] = [];
+
+  public constructor(options?: ServaOptions) {
+    this.options = Object.freeze({
+      hostname: options?.hostname || defaults.hostname!,
+      port: options?.port || defaults.port!,
+    });
+  }
 
   public route(
     methods: RequestMethod[],
@@ -52,7 +72,7 @@ export class Serva {
   public use(
     methods: RequestMethod[],
     path: string,
-    callback: MiddlewareCalback,
+    callback: MiddlewareCallback,
   ): Route {
     const route = Route.for(methods, path);
 
@@ -61,12 +81,18 @@ export class Serva {
     return route;
   }
 
-  public async serve(addr: string | HTTPOptions) {
+  public async serve() {
     if (this.server) {
       throw new AlreadyServing();
     }
 
-    this.server = serve(addr);
+    this.server = serve({
+      port: this.options.port!,
+      hostname: this.options.hostname,
+    });
+
+    success(`listening on ${this.options.hostname!}:${this.options.port}`);
+
     for await (const req of this.server) {
       this.handler(req);
     }
@@ -133,7 +159,7 @@ export class Serva {
 }
 
 async function dispatch(
-  callbacks: (MiddlewareCalback)[],
+  callbacks: (MiddlewareCallback)[],
   context: RequestContext,
 ): Promise<any> {
   let i = -1;

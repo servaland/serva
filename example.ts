@@ -17,4 +17,4 @@ app.route(
   (__, name) => `Hello, ${name}!`,
 );
 
-app.serve({ port: 3333 });
+app.serve();
