@@ -1,1 +1,1 @@
-export default () => () => "Hello, World!";
+export default () => () => "Welcome to Serva";

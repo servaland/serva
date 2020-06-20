@@ -1,5 +1,4 @@
 import {
-  HTTPOptions,
   Status,
   Server,
   ServerRequest,

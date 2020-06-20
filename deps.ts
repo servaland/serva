@@ -26,5 +26,8 @@ export {
 export { walk } from "https://deno.land/std@0.57.0/fs/walk.ts";
 export { readJson } from "https://deno.land/std@0.57.0/fs/read_json.ts";
 export { exists } from "https://deno.land/std@0.57.0/fs/exists.ts";
+export { emptyDir } from "https://deno.land/std@0.57.0/fs/empty_dir.ts";
 
 export * as colors from "https://deno.land/std@0.57.0/fmt/colors.ts";
+
+export { parse } from "https://deno.land/std@0.57.0/flags/mod.ts";

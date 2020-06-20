@@ -8,7 +8,6 @@ import {
   relative,
   exists,
   basename,
-  colors,
 } from "./deps.ts";
 import { warn } from "./_logger.ts";
 import { RequestMethod } from "./_route.ts";
@@ -19,7 +18,7 @@ import {
   EndpointCallback,
 } from "./serva.ts";
 
-const configFileName = "serva.config.json";
+export const configFileName = "serva.config.json";
 
 type ServaConfig = ServaOptions & {
   fileExtension?: string;
@@ -49,7 +48,6 @@ export async function mount(directory: string = Deno.cwd()): Promise<Serva> {
 
   // read the directory structure
   for await (const entry of Deno.readDir(directory)) {
-    const path = join(directory, entry.name);
     if (entry.isDirectory) {
       switch (entry.name) {
         case "routes":
@@ -110,7 +108,7 @@ async function* readRoutes(
 
     const module = await import(entry.path);
     if (typeof module.default !== "function") {
-      warn(`invalid export ${colors.underline(`file://${entry.path}`)}`);
+      warn(`invalid export file://${entry.path}`);
       continue;
     }
 
@@ -145,7 +143,3 @@ function createScopedApp(
     },
   });
 }
-
-const app = await mount("./example");
-
-app.serve();
