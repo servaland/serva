@@ -141,7 +141,7 @@ async function init() {
         servaModule.startsWith(".")
           ? `import { Serva, RequestContext } from "../deps.ts";
 
-export default (app: Serva) => (context: RequestContext) => "Hello, World!";\n`
+export default (app: Serva) => (context: RequestContext) => "Welcome to Serva";\n`
           : `import {
   Serva,
   RequestContext,
