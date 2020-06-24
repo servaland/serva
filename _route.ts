@@ -1,80 +1,44 @@
-import { pathToRegexp, Key } from "./deps.ts";
+import {
+  pathToRegexp,
+  Key,
+  match,
+} from "https://raw.githubusercontent.com/pillarjs/path-to-regexp/v6.1.0/src/index.ts";
 
-export type RequestMethod =
-  | "GET"
-  | "POST"
-  | "PUT"
-  | "DELETE"
-  | "OPTIONS"
-  | "PATCH";
-
-const registry = new Map<string, Route>();
-
-const wildcardRegexp = /(\/\*)$/;
-
-export class Route {
-  public readonly methods: RequestMethod[];
-  public readonly path: string;
-
-  private readonly keys: Key[];
-  private readonly regexp: RegExp;
-
-  public static for(methods: RequestMethod[], path: string): Route {
-    const key = cacheKey(methods, path);
-    let route = registry.get(key);
-
-    if (!route) {
-      route = new Route(methods, path);
-      registry.set(key, route);
-    }
-
-    return route;
-  }
-
-  public constructor(
-    methods: RequestMethod[],
-    path: string,
-  ) {
-    this.methods = methods;
-    this.path = path;
-    this.keys = [];
-    this.regexp = pathToRegexp(cleanPath(this.path), this.keys, {
-      end: !wildcardRegexp.test(this.path),
-    });
-  }
-
-  public test(method: RequestMethod | string, path: string) {
-    // check the method...
-    const matched = this.methods.includes(method as RequestMethod) ||
-      // ... allowing "HEAD" to valid as "GET"
-      (method === "HEAD" &&
-        this.methods.includes("GET"));
-
-    return matched && this.regexp.test(path);
-  }
-
-  public params(path: string): [string | number, string][] {
-    const matches = this.keys.length > 0 ? this.regexp.exec(path) : null;
-
-    return matches
-      ? matches
-        .slice(1, this.keys.length + 1)
-        .reduce(
-          (current, value, index) =>
-            current.concat([[this.keys[index].name, value]]),
-          [] as [string | number, string][],
-        )
-      : [];
-  }
+export interface Route {
+  readonly filePath: string;
+  readonly method: string;
+  readonly path: string;
+  readonly regexp: RegExp;
+  readonly paramNames: (string | number)[];
+  params: (path: string) => object | null;
 }
 
-function cacheKey(methods?: RequestMethod[], path?: string): string {
-  return [Array.isArray(methods) ? methods.sort() : methods, path].join(":");
+export default function create(
+  method: string,
+  path: string,
+  filePath: string,
+): Route {
+  const cleaned = cleanPath(path);
+  const keys: Key[] = [];
+  const regexp = pathToRegexp(cleaned, keys);
+  const paramNames = keys.map((key) => key.name);
+  const matcher = match(cleaned);
+
+  return {
+    filePath,
+    path,
+    method,
+    regexp,
+    paramNames,
+    params(path: string): object | null {
+      const matches = matcher(path);
+      return matches ? matches.params : null;
+    },
+  };
 }
 
 function cleanPath(path: string): string {
-  // /path/* => /path
-  let cleaned = path.replace(wildcardRegexp, "");
+  let cleaned = path;
 
   // /[param] => /:param
   const split = cleaned.split("[");
