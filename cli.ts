@@ -1,9 +1,11 @@
 import { parse, Args } from "https://deno.land/std@0.57.0/flags/mod.ts";
 import App from "./app.ts";
 
-main(Deno.args);
+if (import.meta.main) {
+  main(Deno.args);
+}
 
-function main(argv: string[]) {
+export default function main(argv: string[]) {
   const flags = parse(Deno.args);
 
   switch (flags._[0]) {
@@ -28,6 +30,7 @@ async function develop(flags: Args) {
     }
   }
 
+  // debounce the remount
   function remount() {
     clearTimeout(timer);
     timer = setTimeout(() => app.remount(), 50);

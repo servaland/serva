@@ -113,7 +113,7 @@ export default class App {
       try {
         let filePath = entry.path;
         if (remount) {
-          filePath += "?_" + Math.random();
+          filePath += "#" + Math.random();
         }
 
         ({ default: routeFactory } = await import(filePath));
