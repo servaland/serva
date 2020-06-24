@@ -1,7 +1,6 @@
 import { walk } from "https://deno.land/std@0.57.0/fs/walk.ts";
 import {
   serve,
-  Response,
   Server,
   ServerRequest,
 } from "https://deno.land/std@0.57.0/http/mod.ts";
@@ -30,7 +29,7 @@ export default class App {
   public readonly appPath: string;
 
   public constructor(appPath: string) {
-    this.appPath = appPath;
+    this.appPath = resolve(appPath);
     this.server = serve({
       port: 4500,
     });
@@ -41,7 +40,7 @@ export default class App {
    *
    * @public
    * @param {...string[]} path
-   * @returns {string}
+   * @returns {string}resolve
    */
   public path(...path: string[]): string {
     if (path.length === 0) {
@@ -52,7 +51,7 @@ export default class App {
       return path[0];
     }
 
-    return resolve(this.appPath, ...path);
+    return join(this.appPath, ...path);
   }
 
   /**
@@ -69,17 +68,30 @@ export default class App {
     }
   }
 
+  public remount() {
+    this.mount(true);
+  }
+
   /**
    * Mounts the application to the `appPath`.
    * 
    * @private
    * @returns {Promise<void>}
    */
-  private async mount(): Promise<void> {
+  private async mount(remount: boolean = false): Promise<void> {
     const routesPath = this.path(ROUTES_DIR);
 
     // clear on remounts
     this.routes.clear();
+
+    try {
+      const lstats = await Deno.lstat(routesPath);
+      if (!lstats.isDirectory) {
+        throw new Error();
+      }
+    } catch (err) {
+      throw new Error(`${routesPath} not found`);
+    }
 
     for await (const entry of walk(routesPath)) {
       // ignore directories and any non-typescript files
@@ -99,7 +111,12 @@ export default class App {
       // register route
       let routeFactory: any;
       try {
-        ({ default: routeFactory } = await import(entry.path));
+        let filePath = entry.path;
+        if (remount) {
+          filePath += "?_" + Math.random();
+        }
+
+        ({ default: routeFactory } = await import(filePath));
         if (typeof routeFactory !== "function") {
           throw new TypeError(
             `file://${route.filePath} default export is not a callback.`,
