@@ -1,10 +1,17 @@
 import { registerRoute } from "../../../registers.ts";
-import { Route } from "../../../_route.ts";
 
 export default registerRoute<{ name: string }>(({ registerHook }) => {
-  registerHook((_, next) => {
-    return next();
+  registerHook(async ({ respond, params }, next) => {
+    await next();
+
+    const name = params.get("name");
+    if (name === "chris") {
+      respond({
+        body: "Fuck you!",
+      });
+    }
   });
 
-  return (request, { name }) => request.respond({ body: `Hello, ${name}` });
+  return ({ respond, params }) =>
+    respond({ body: `Hello, ${params.get("name")}` });
 });

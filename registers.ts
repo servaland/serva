@@ -1,4 +1,4 @@
-import { ServerRequest } from "https://deno.land/std@0.57.0/http/mod.ts";
+import { ServaRequest } from "./_request.ts";
 
 interface RegisterApi {
   registerHook: (...hooks: HookCallback[]) => void;
@@ -9,11 +9,11 @@ interface NextCallback {
 }
 
 export interface HookCallback {
-  (request: ServerRequest, next: NextCallback): Promise<any>;
+  (request: ServaRequest, next: NextCallback): Promise<any>;
 }
 
 export interface RouteCallback<P = {}> {
-  (request: ServerRequest, params: P): Promise<any> | any;
+  (request: ServaRequest, params: P): Promise<any> | any;
 }
 
 interface RouteInfo {

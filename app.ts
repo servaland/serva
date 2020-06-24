@@ -1,6 +1,7 @@
 import { walk } from "https://deno.land/std@0.57.0/fs/walk.ts";
 import {
   serve,
+  Response,
   Server,
   ServerRequest,
 } from "https://deno.land/std@0.57.0/http/mod.ts";
@@ -13,6 +14,7 @@ import {
   resolve,
 } from "https://deno.land/std@0.57.0/path/mod.ts";
 import createRoute, { Route } from "./_route.ts";
+import createRequest, { ServaRequest } from "./_request.ts";
 import { HookCallback, RouteCallback, registerRoute } from "./registers.ts";
 
 const ROUTES_DIR = "routes";
@@ -34,6 +36,13 @@ export default class App {
     });
   }
 
+  /**
+   * Returns a path relative to the `appPath`. Or the absolute path if specified.
+   *
+   * @public
+   * @param {...string[]} path
+   * @returns {string}
+   */
   public path(...path: string[]): string {
     if (path.length === 0) {
       return this.appPath;
@@ -46,6 +55,12 @@ export default class App {
     return resolve(this.appPath, ...path);
   }
 
+  /**
+   * Starts the application.
+   *
+   * @public
+   * @returns {Promise<void>}
+   */
   public async start() {
     await this.mount();
 
@@ -54,6 +69,12 @@ export default class App {
     }
   }
 
+  /**
+   * Mounts the application to the `appPath`.
+   * 
+   * @private
+   * @returns {Promise<void>}
+   */
   private async mount(): Promise<void> {
     const routesPath = this.path(ROUTES_DIR);
 
@@ -108,18 +129,23 @@ export default class App {
     }
   }
 
-  private async handleRequest(request: ServerRequest): Promise<void> {
-    // todo: use host from header
-    const url = new URL(request.url, "https://serva.land");
-
+  /**
+   * Handles an incoming request from the server.
+   * 
+   * @private
+   * @param {ServerRequest} req
+   * @returns {<Promise<void>} 
+   */
+  private async handleRequest(req: ServerRequest): Promise<void> {
     // find a matching route
     let route: Route | null = null;
     let stack: HookCallback[] = [];
+    const { pathname } = new URL(req.url, "https://serva.land");
 
     for (const [method, map] of this.routes) {
-      if (method === request.method || method === "*") {
+      if (method === req.method || method === "*") {
         for (const r of map.keys()) {
-          if (r.regexp.test(url.pathname)) {
+          if (r.regexp.test(pathname)) {
             route = r;
             stack = map.get(r)!;
             // route found
@@ -131,24 +157,57 @@ export default class App {
 
     // not found
     if (!route) {
-      request.respond({
+      req.respond({
         status: 404,
       });
       return;
     }
+
+    const request = createRequest(req, route);
 
     try {
       await dispatch(stack, request);
     } catch (err) {
       // todo: error handling
       throw err;
+    } finally {
+      // if nobody has responded, send the current request's response
+      if (!request.responded) {
+        req.respond(request.response);
+      }
     }
   }
 }
 
+/**
+ * Dispatch the callback stack with a given request object.
+ *
+ * @example
+ *   async function one(request, next) {
+ *     console.log("enter: one");
+ *     await next();
+ *     console.log("exit: one");
+ *   }
+ *
+ *   async function two(request, next) {
+ *     console.log("enter: two");
+ *     await next();
+ *     console.log("exit: two");
+ *   }
+ *
+ *   await dispatch([one, two], request);
+ *   // => "enter: one"
+ *   // => "enter: two"
+ *   // => "exit: two"
+ *   // => "exit: one"
+ *
+ * @param {CallbackHook[]} callbacks
+ * @param {ServaRequest} request
+ * @returns {Promise<any>}
+ */
 async function dispatch(
   callbacks: (HookCallback)[],
-  request: ServerRequest,
+  request: ServaRequest,
 ): Promise<any> {
   let i = -1;
 
@@ -241,11 +300,14 @@ function wrapRouteCallback(
   callback: RouteCallback,
 ): HookCallback {
   return async (request, next) => {
-    const params = route.params(
-      new URL(request.url, "https://serva.land").pathname,
-    );
+    const params = route.params(request.url.pathname);
+    const body = await callback(request, params || {});
 
-    await callback(request, params || {});
+    // if no middleware or the route itself has responded and it returned a body
+    // then add the body to the request's response
+    if (body !== undefined) {
+      request.respond({ body });
+    }
 
     return next();
   };

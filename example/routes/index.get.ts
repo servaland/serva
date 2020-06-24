@@ -1,5 +1,3 @@
-export default () =>
-  (request: any) =>
-    request.respond({
-      body: "fuck yea",
-    });
+import { registerRoute } from "../../registers.ts";
+
+export default registerRoute(() => (request: any) => "Hello from Serva");

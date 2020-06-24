@@ -10,9 +10,17 @@ export interface Route {
   readonly path: string;
   readonly regexp: RegExp;
   readonly paramNames: (string | number)[];
-  params: (path: string) => object | null;
+  params: (path: string) => Map<string, string>;
 }
 
+/**
+ * Creates a new route object.
+ *
+ * @param {string} method
+ * @param {string} path
+ * @param {string} filePath
+ * @returns {Route}
+ */
 export default function create(
   method: string,
   path: string,
@@ -30,13 +38,23 @@ export default function create(
     method,
     regexp,
     paramNames,
-    params(path: string): object | null {
+    params(path: string): Map<string, string> {
       const matches = matcher(path);
-      return matches ? matches.params : null;
+      return new Map(matches ? Object.entries(matches.params) : []);
     },
   };
 }
 
+/**
+ * Cleans a Serva path into a path-to-regexp path.
+ *
+ * @example
+ *   cleanPath("/comments/[comment]");
+ *   // => "/comments/:comment"
+ *
+ * @param {string} path
+ * @returns {string}
+ */
 function cleanPath(path: string): string {
   let cleaned = path;
 
