@@ -27,7 +27,9 @@ export interface ServaRequest {
  * @returns {ServaRequest}
  */
 export default function create(req: ServerRequest, route: Route): ServaRequest {
-  let response: Response = {};
+  let response: Response = {
+    headers: new Headers(),
+  };
   const proto = req.proto.split("/")[0].toLowerCase();
   const url = new URL(req.url, `${proto}://${req.headers.get("host")}`);
 
