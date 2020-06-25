@@ -172,8 +172,12 @@ export default class App {
     let stack: HookCallback[] = [];
     const { pathname } = new URL(req.url, "https://serva.land");
 
-    // @todo: match GET routes for HEAD request
-    [req.method, "*"].some((m) => {
+    const possibleMethods = [req.method, "*"];
+    if (req.method === "HEAD") {
+      possibleMethods.splice(0, 1, "GET");
+    }
+
+    possibleMethods.some((m) => {
       const routes = this.routes.get(m);
       if (routes) {
         for (const r of routes.keys()) {

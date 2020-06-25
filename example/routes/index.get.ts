@@ -1,3 +1,3 @@
 import { registerRoute } from "../../registers.ts";
 
-export default registerRoute(() => (request: any) => "Hello from Serva");
+export default registerRoute(() => () => "Hello from Serva");
