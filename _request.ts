@@ -4,6 +4,11 @@ import {
 } from "https://deno.land/std@0.57.0/http/mod.ts";
 import { Route } from "./_route.ts";
 
+export interface ServaResponse extends Response {
+  headers: Headers;
+  clearHeaders: () => void;
+}
+
 export interface ServaRequest {
   readonly rawRequest: ServerRequest;
 
@@ -15,7 +20,7 @@ export interface ServaRequest {
 
   // response
   readonly responded: boolean;
-  readonly response: Response;
+  readonly response: ServaResponse;
   respond: (response: Response) => void;
 }
 
@@ -27,8 +32,11 @@ export interface ServaRequest {
  * @returns {ServaRequest}
  */
 export default function create(req: ServerRequest, route: Route): ServaRequest {
-  let response: Response = {
+  const response: ServaResponse = {
     headers: new Headers(),
+    clearHeaders() {
+      this.headers = new Headers();
+    },
   };
   const proto = req.proto.split("/")[0].toLowerCase();
   const url = new URL(req.url, `${proto}://${req.headers.get("host")}`);
@@ -39,7 +47,7 @@ export default function create(req: ServerRequest, route: Route): ServaRequest {
     method: req.method,
     params: route.params(url.pathname),
     headers: readonlyHeaders(req.headers),
-    get response(): Response {
+    get response(): ServaResponse {
       return response;
     },
     get responded(): boolean {
@@ -53,8 +61,15 @@ export default function create(req: ServerRequest, route: Route): ServaRequest {
           case "trailers":
           case "status":
           case "body":
-          case "headers":
             response[prop] = value;
+            break;
+
+          case "headers":
+            // set or merge
+            res.headers!.forEach((value, name) => {
+              response.headers.set(name, value);
+            });
+            break;
         }
       }
     },

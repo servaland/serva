@@ -1,3 +1,11 @@
 import { registerRoute } from "../../registers.ts";
 
-export default registerRoute(() => () => "Hello from Serva");
+export default registerRoute(() =>
+  ({ respond }) =>
+    respond({
+      body: "Hello from Serva",
+      headers: new Headers({
+        "X-Powered-By": "Serva",
+      }),
+    })
+);
