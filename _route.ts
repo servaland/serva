@@ -26,9 +26,12 @@ export default function create(
   path: string,
   filePath: string,
 ): Route {
+  const glob = path.endsWith("/*");
   const cleaned = cleanPath(path);
   const keys: Key[] = [];
-  const regexp = pathToRegexp(cleaned, keys);
+  const regexp = pathToRegexp(cleaned, keys, {
+    end: !glob,
+  });
   const paramNames = keys.map((key) => key.name);
   const matcher = match(cleaned);
 
@@ -56,7 +59,7 @@ export default function create(
  * @returns {string}
  */
 function cleanPath(path: string): string {
-  let cleaned = path;
+  let cleaned = path.replace(/\/\*$/, "");
 
   // /[param] => /:param
   const split = cleaned.split("[");
