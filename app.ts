@@ -159,18 +159,20 @@ export default class App {
     let stack: HookCallback[] = [];
     const { pathname } = new URL(req.url, "https://serva.land");
 
-    for (const [method, map] of this.routes) {
-      if (method === req.method || method === "*") {
-        for (const r of map.keys()) {
+    // @todo: match GET routes for HEAD request
+    [req.method, "*"].some((m) => {
+      const routes = this.routes.get(m);
+      if (routes) {
+        for (const r of routes.keys()) {
           if (r.regexp.test(pathname)) {
             route = r;
-            stack = map.get(r)!;
+            stack = routes.get(r)!;
             // route found
-            break;
+            return true;
           }
         }
       }
-    }
+    });
 
     // not found
     if (!route) {
