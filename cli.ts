@@ -12,13 +12,17 @@ export default function main(argv: string[]) {
     case "dev":
       develop(flags);
       break;
+
+    case "start":
+      start(flags);
+      break;
   }
 }
 
 async function develop(flags: Args) {
   let timer: number;
+  const app = createApp(flags);
 
-  const app = new App(flags._[1] as string || ".");
   app.start();
 
   for await (const event of Deno.watchFs(app.path("routes"))) {
@@ -35,4 +39,14 @@ async function develop(flags: Args) {
     clearTimeout(timer);
     timer = setTimeout(() => app.remount(), 50);
   }
+}
+
+function start(flags: Args) {
+  const app = createApp(flags);
+
+  app.start();
+}
+
+function createApp(flags: Args): App {
+  return new App(flags._[1] as string || ".");
 }
