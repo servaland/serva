@@ -2,14 +2,14 @@ import { registerRoute } from "../../../registers.ts";
 
 export default registerRoute<{ name: string }>(({ registerHook }) => {
   registerHook(async ({ respond, params }, next) => {
-    await next();
-
     const name = params.get("name");
-    if (name === "chris") {
-      respond({
-        body: "Fuck you!",
+    if (name === "god") {
+      return respond({
+        body: "Stop trying to be god, that's not who you are! — Travis Scott",
       });
     }
+
+    await next();
   });
 
   return ({ respond, params }) =>

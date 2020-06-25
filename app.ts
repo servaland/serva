@@ -11,6 +11,7 @@ import {
   join,
   relative,
   resolve,
+  sep,
 } from "https://deno.land/std@0.57.0/path/mod.ts";
 import createRoute, { Route } from "./_route.ts";
 import createRequest, { ServaRequest } from "./_request.ts";
@@ -21,6 +22,7 @@ const FILE_EXT = ".ts";
 
 type RoutesMap = Map<Route, HookCallback[]>;
 type RoutesStruct = Map<string, RoutesMap>;
+type RouteEntry = [string, [Route, HookCallback[]]];
 
 export default class App {
   private readonly routes: RoutesStruct = new Map();
@@ -93,6 +95,8 @@ export default class App {
       throw new Error(`${routesPath} not found`);
     }
 
+    const routes: RouteEntry[] = [];
+
     for await (const entry of walk(routesPath)) {
       // ignore directories and any non-typescript files
       // todo: support for javascript
@@ -140,10 +144,19 @@ export default class App {
       }
 
       // set routes
-      const methods: RoutesMap = this.routes.get(route.method) || new Map();
-      methods.set(route, [...hooks, wrapRouteCallback(route, callback)]);
-      this.routes.set(route.method, methods);
+      routes.push(
+        [route.method, [route, [...hooks, wrapRouteCallback(route, callback)]]],
+      );
     }
+
+    // sort the routes
+    routes.sort(sortRoutes);
+    routes.forEach((entry) => {
+      const [method, [route, hooks]] = entry;
+      const methodRoutes = this.routes.get(method) || new Map();
+      methodRoutes.set(route, hooks);
+      this.routes.set(method, methodRoutes);
+    });
   }
 
   /**
@@ -159,18 +172,24 @@ export default class App {
     let stack: HookCallback[] = [];
     const { pathname } = new URL(req.url, "https://serva.land");
 
-    for (const [method, map] of this.routes) {
-      if (method === req.method || method === "*") {
-        for (const r of map.keys()) {
+    const possibleMethods = [req.method, "*"];
+    if (req.method === "HEAD") {
+      possibleMethods.splice(0, 1, "GET");
+    }
+
+    possibleMethods.some((m) => {
+      const routes = this.routes.get(m);
+      if (routes) {
+        for (const r of routes.keys()) {
           if (r.regexp.test(pathname)) {
             route = r;
-            stack = map.get(r)!;
+            stack = routes.get(r)!;
             // route found
-            break;
+            return true;
           }
         }
       }
-    }
+    });
 
     // not found
     if (!route) {
@@ -328,4 +347,26 @@ function wrapRouteCallback(
 
     return next();
   };
+}
+
+function sortRoutes(a: RouteEntry, b: RouteEntry): number {
+  const pathA = a[1][0].path.replace(/\[.+\]/g, "\0");
+  const pathB = b[1][0].path.replace(/\[.+\]/g, "\0");
+
+  for (let i = 0, l = Math.min(pathA.length, pathB.length); i < l; ++i) {
+    const aChar = pathA.charAt(i);
+    const bChar = pathB.charAt(i);
+
+    if (aChar !== bChar) {
+      if (aChar === "\0") {
+        return 1;
+      } else if (bChar === "\0") {
+        return -1;
+      }
+
+      return pathB.split(sep).length - pathA.split(sep).length;
+    }
+  }
+
+  return 0;
 }
