@@ -15,10 +15,20 @@ import {
 } from "https://deno.land/std@0.57.0/path/mod.ts";
 import createRoute, { Route } from "./_route.ts";
 import createRequest, { ServaRequest } from "./_request.ts";
-import { HookCallback, RouteCallback, registerRoute } from "./registers.ts";
+import {
+  HookCallback,
+  RouteCallback,
+  registerRoute,
+  registerHooks,
+} from "./registers.ts";
 
+const METHODS_AVAILABLE = "get|post|put|options|delete|patch";
 const ROUTES_DIR = "routes";
+const HOOKS_FILENAME = "_hooks";
 const FILE_EXT = ".ts";
+const HOOKS_REGEXP = new RegExp(
+  `${HOOKS_FILENAME}(\\.(${METHODS_AVAILABLE}))?\\${FILE_EXT}$`,
+);
 
 type RoutesMap = Map<Route, HookCallback[]>;
 type RoutesStruct = Map<string, RoutesMap>;
@@ -96,6 +106,7 @@ export default class App {
     }
 
     const routes: RouteEntry[] = [];
+    const globalHooks: RouteEntry[] = [];
 
     for await (const entry of walk(routesPath)) {
       // ignore directories and any non-typescript files
@@ -104,11 +115,13 @@ export default class App {
         continue;
       }
 
-      // route information
       const relativeEntryPath = relative(routesPath, entry.path);
+      const hooksFile = HOOKS_REGEXP.test(relativeEntryPath);
+      const method = routeMethod(relativeEntryPath);
+      const path = routePath(relativeEntryPath); // route information
       const route = createRoute(
-        routeMethod(relativeEntryPath),
-        routePath(relativeEntryPath),
+        method,
+        path,
         entry.path,
       );
 
@@ -134,27 +147,59 @@ export default class App {
       let hooks: HookCallback[];
       let callback: RouteCallback;
 
-      // developer wrapped it with `registerRoute`
-      if (routeFactory[Symbol.for("serva.route_factory")]) {
-        // run and destruct the routeFactory
-        [hooks, callback] = await routeFactory(route);
+      const factory = (routeFactory[Symbol.for("serva.route_factory")] ||
+        routeFactory[Symbol.for("serva.hooks_factory")])
+        ? routeFactory
+        : (hooksFile
+          ? registerHooks(routeFactory)
+          : registerRoute(routeFactory));
+
+      if (hooksFile) {
+        hooks = await factory(route);
       } else {
-        // auto-wrap, lazy
-        [hooks, callback] = await registerRoute(routeFactory)(route);
+        [hooks, callback] = await factory(route);
       }
 
-      // set routes
-      routes.push(
-        [route.method, [route, [...hooks, wrapRouteCallback(route, callback)]]],
-      );
+      // set routes/hooks
+      if (hooksFile) {
+        globalHooks.push([
+          route.method,
+          [route, hooks],
+        ]);
+      } else {
+        routes.push(
+          [
+            route.method,
+            [route, [...hooks, wrapRouteCallback(route, callback!)]],
+          ],
+        );
+      }
     }
 
     // sort the routes
+    globalHooks.sort(sortRoutes);
     routes.sort(sortRoutes);
+
+    // merge global hooks to routes
     routes.forEach((entry) => {
       const [method, [route, hooks]] = entry;
       const methodRoutes = this.routes.get(method) || new Map();
-      methodRoutes.set(route, hooks);
+
+      // fake route path
+      const pathLike = route.path.replace(/\[.+\]/g, "a");
+
+      // test the hooks path if it matches the route path
+      // @todo: clean this code up, looks messy
+      const injectedHooks = globalHooks.filter((entry) => {
+        const [hookMethod] = entry;
+        return (hookMethod === method || hookMethod === "*") &&
+          entry[1][0].regexp.test(pathLike);
+      }).map((entry) => entry[1][1]).reduce(
+        (all, hooks) => all.concat(hooks),
+        [],
+      );
+
+      methodRoutes.set(route, injectedHooks.concat(hooks));
       this.routes.set(method, methodRoutes);
     });
   }
@@ -278,7 +323,7 @@ async function dispatch(
 function routePath(path: string): string {
   let name = basename(path, FILE_EXT);
   const matched = name.match(
-    /.*(?=\.(get|post|put|options|delete|patch)$)/i,
+    new RegExp(`.*(?=\.(${METHODS_AVAILABLE})$)`, "i"),
   );
 
   if (matched) {
@@ -287,6 +332,8 @@ function routePath(path: string): string {
 
   if (name === "index") {
     name = "";
+  } else if (name === HOOKS_FILENAME) {
+    name = "*";
   }
 
   let base = dirname(path);
@@ -313,7 +360,7 @@ function routePath(path: string): string {
 function routeMethod(path: string): string {
   const name = basename(path, FILE_EXT);
   const matched = name.match(
-    /.*(?=\.(get|post|put|options|delete|patch)$)/i,
+    new RegExp(`.*(?=\.(${METHODS_AVAILABLE})$)`, "i"),
   );
 
   let method = "*";
@@ -364,8 +411,13 @@ function sortRoutes(a: RouteEntry, b: RouteEntry): number {
         return -1;
       }
 
-      return pathB.split(sep).length - pathA.split(sep).length;
+      return pathA.split(sep).length - pathB.split(sep).length;
     }
+  }
+
+  // compare methods
+  if (a[0] === "*" || b[0] === "*") {
+    return b[0].charCodeAt(0) - a[0].charCodeAt(0);
   }
 
   return 0;

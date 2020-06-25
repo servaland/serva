@@ -71,3 +71,42 @@ export function registerRoute<
 
   return routeFactory;
 }
+
+/**
+ * Create a hooks factory for an application to consume on mount.
+ *
+ * @example
+ *   registerRoute(({ registerHook }) => {
+ *     registerHook(async (request, next) => {
+ *       // enter logic
+ *       await next();
+ *       // exit logic
+ *     });
+ *   });
+ *
+ * @param {function} register The hooks register callback
+ * @returns {function(*): *} The hooks factory to be used by the app when mounting
+ */
+export function registerHooks(
+  register: RegisterCallback<void>,
+): Factory<HookCallback[]> {
+  async function hooksFactory(
+    routeInfo: RouteInfo,
+  ): Promise<HookCallback[]> {
+    const hooks: HookCallback[] = [];
+    await register(
+      {
+        registerHook: hooks.push.bind(hooks),
+      },
+      routeInfo,
+    );
+
+    return hooks;
+  }
+
+  // identify as a hooks factory, used when the app mounts
+  // @ts-expect-error
+  hooksFactory[Symbol.for("serva.hooks_factory")] = true;
+
+  return hooksFactory;
+}
