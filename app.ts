@@ -396,21 +396,32 @@ function wrapRouteCallback(
   };
 }
 
+/**
+ * Sort function for routes.
+ *
+ * @param {RouteEntry} a
+ * @param {RouteEntry} b
+ * @returns {number}
+ */
 function sortRoutes(a: RouteEntry, b: RouteEntry): number {
+  // find params and insert placeholders
   const pathA = a[1][0].path.replace(/\[.+\]/g, "\0");
   const pathB = b[1][0].path.replace(/\[.+\]/g, "\0");
 
+  // compare each character of the urls
   for (let i = 0, l = Math.min(pathA.length, pathB.length); i < l; ++i) {
     const aChar = pathA.charAt(i);
     const bChar = pathB.charAt(i);
 
     if (aChar !== bChar) {
+      // param check
       if (aChar === "\0") {
         return 1;
       } else if (bChar === "\0") {
         return -1;
       }
 
+      // order by least path segments
       return pathA.split(sep).length - pathB.split(sep).length;
     }
   }
