@@ -2,28 +2,37 @@ import createRequest, { ServaRequest } from "./_request.ts";
 import createRoute, { Route } from "./_route.ts";
 import { fs, http, path } from "./deps.ts";
 
-const METHODS_AVAILABLE = "get|post|put|delete|patch";
 const ROUTES_DIR = "routes";
-const FILE_EXT = ".ts";
 
 export interface RouteCallback {
   (request: ServaRequest): Promise<any> | any;
 }
+
+export interface ServaConfig {
+  port: number;
+  hostname?: string;
+  extension: string;
+  methods: string[];
+}
+
+const DEFAULT_CONFIG = Object.freeze({
+  port: 4500,
+  extension: ".ts",
+  methods: "get|post|put|delete|patch".split("|"),
+});
 
 type RouteEntry = [Route, RouteCallback];
 type RoutesStruct = Map<string, RouteEntry[]>;
 
 export default class App {
   private readonly routes: RoutesStruct = new Map();
-  private readonly server: http.Server;
+  private readonly server?: http.Server;
 
   public readonly appPath: string;
+  public readonly config: ServaConfig = Object.assign({}, DEFAULT_CONFIG);
 
   public constructor(appPath: string) {
     this.appPath = path.resolve(appPath);
-    this.server = http.serve({
-      port: 4500,
-    });
   }
 
   /**
@@ -52,25 +61,86 @@ export default class App {
    * @returns {Promise<void>}
    */
   public async start() {
+    if (this.server) {
+      console.log("App already started.");
+      return;
+    }
+
     await this.mount();
+
+    const options: http.HTTPOptions = {
+      port: this.config.port,
+    };
+
+    if (this.config.hostname) {
+      options.hostname = this.config.hostname;
+    }
+
+    // @ts-expect-error
+    this.server = http.serve(options);
+
+    console.log(
+      `App started, ${
+        options.hostname ? options.hostname : ""
+      }:${options.port}`,
+    );
 
     for await (const request of this.server) {
       this.handleRequest(request);
     }
   }
 
-  public remount() {
-    this.mount(true);
-  }
-
   /**
    * Mounts the application to the `appPath`.
    * 
-   * @private
+   * @params {boolean} [remount] Fource app to remount.
    * @returns {Promise<void>}
    */
-  private async mount(remount: boolean = false): Promise<void> {
+  async mount(remount: boolean = false): Promise<void> {
+    if (!remount && this.routes.size > 0) {
+      return;
+    }
+
     const routesPath = this.path(ROUTES_DIR);
+
+    // /////////////////////////////////////////////////////////////////////////
+    // Config
+
+    try {
+      const configFilePath = this.path("serva.config.json");
+      const lstats = await Deno.lstat(configFilePath);
+      if (!lstats.isFile) {
+        throw new Error();
+      }
+
+      // @ts-expect-error
+      this.config = Object.assign({}, DEFAULT_CONFIG);
+
+      const config = await fs.readJson(configFilePath) as object;
+      for (const [key, value] of Object.entries(config)) {
+        switch (key) {
+          case "port":
+          case "hostname":
+          case "extension":
+          case "methods":
+            // @ts-ignore
+            this.config[key] = value;
+            break;
+
+          default:
+            throw new Error(`Invalid config for: \`${key}\`.`);
+        }
+      }
+    } catch (err) {
+      if (err instanceof Deno.errors.NotFound) {
+        console.log("No serva.config.json found, using defaults.");
+      } else {
+        throw err;
+      }
+    }
+
+    // /////////////////////////////////////////////////////////////////////////
+    // Routes
 
     // clear on remounts
     this.routes.clear();
@@ -89,13 +159,13 @@ export default class App {
     for await (const entry of fs.walk(routesPath)) {
       // ignore directories and any non-typescript files
       // todo: support for javascript
-      if (entry.isDirectory || !entry.name.endsWith(FILE_EXT)) {
+      if (entry.isDirectory || !entry.name.endsWith(this.config.extension)) {
         continue;
       }
 
       const relativeEntryPath = path.relative(routesPath, entry.path);
-      const method = routeMethod(relativeEntryPath);
-      const urlPath = routePath(relativeEntryPath); // route information
+      const method = routeMethod(relativeEntryPath, this.config);
+      const urlPath = routePath(relativeEntryPath, this.config); // route information
       const route = createRoute(
         method,
         urlPath,
@@ -129,12 +199,8 @@ export default class App {
       );
     }
 
-    // sort the routes
-    routes.sort(sortRoutes);
-
-    // replace routes
-    this.routes.clear();
-    routes.forEach(([method, entry]) => {
+    // sort and set routes
+    routes.sort(sortRoutes).forEach(([method, entry]) => {
       const entries = this.routes.get(method) || [];
       entries.push(entry);
 
@@ -210,13 +276,14 @@ export default class App {
  *   routePath("comments/[comment].get.ts");
  *   // => "/comments/[comment]"
  * 
- * @param {string} path
+ * @param {string} filePath
+ * @param {ServaConfig} config
  * @returns {string}
  */
-function routePath(filePath: string): string {
-  let name = path.basename(filePath, FILE_EXT);
+function routePath(filePath: string, config: ServaConfig): string {
+  let name = path.basename(filePath, config.extension);
   const matched = name.match(
-    new RegExp(`.*(?=\.(${METHODS_AVAILABLE})$)`, "i"),
+    new RegExp(`.*(?=\.(${config.methods.join("|")})$)`, "i"),
   );
 
   if (matched) {
@@ -245,13 +312,14 @@ function routePath(filePath: string): string {
  *   routeMethod("/comments/[comment].get.ts")
  *   // => "GET"
  *  
- * @param {string} filePath The route path with no extensions
+ * @param {string} filePath
+ * @param {ServaConfig} config
  * @returns {string}
  */
-function routeMethod(filePath: string): string {
-  const name = path.basename(filePath, FILE_EXT);
+function routeMethod(filePath: string, config: ServaConfig): string {
+  const name = path.basename(filePath, config.extension);
   const matched = name.match(
-    new RegExp(`.*(?=\.(${METHODS_AVAILABLE})$)`, "i"),
+    new RegExp(`.*(?=\.(${config.methods.join("|")})$)`, "i"),
   );
 
   let method = "*";

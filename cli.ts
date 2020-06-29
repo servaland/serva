@@ -37,7 +37,7 @@ async function develop(flags: Args) {
   // debounce the remount
   function remount() {
     clearTimeout(timer);
-    timer = setTimeout(() => app.remount(), 50);
+    timer = setTimeout(() => app.mount(true), 50);
   }
 }
 
