@@ -1,3 +1,5 @@
+export { parse, Args } from "https://deno.land/std@0.57.0/flags/mod.ts";
+
 // fs contains unstable features just re-export under fs
 import { walk } from "https://deno.land/std@0.57.0/fs/walk.ts";
 export const fs = { walk };

@@ -1,4 +1,4 @@
-import { parse, Args } from "https://deno.land/std@0.57.0/flags/mod.ts";
+import { parse, Args } from "./deps.ts";
 import App from "./app.ts";
 
 if (import.meta.main) {
