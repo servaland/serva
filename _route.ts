@@ -52,6 +52,9 @@ export default function create(
  *   cleanPath("/comments/[comment]");
  *   // => "/comments/:comment"
  *
+ *   cleanPath("/comments/*");
+ *   // => "/comments"
+ *
  * @param {string} path
  * @returns {string}
  */
