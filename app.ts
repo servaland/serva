@@ -1,26 +1,6 @@
-import { walk } from "https://deno.land/std@0.57.0/fs/walk.ts";
-import {
-  serve,
-  Server,
-  ServerRequest,
-} from "https://deno.land/std@0.57.0/http/mod.ts";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-} from "https://deno.land/std@0.57.0/path/mod.ts";
-import createRoute, { Route } from "./_route.ts";
 import createRequest, { ServaRequest } from "./_request.ts";
-import {
-  HookCallback,
-  RouteCallback,
-  registerRoute,
-  registerHooks,
-} from "./registers.ts";
+import createRoute, { Route } from "./_route.ts";
+import { fs, http, path } from "./deps.ts";
 
 const METHODS_AVAILABLE = "get|post|put|options|delete|patch";
 const ROUTES_DIR = "routes";
@@ -30,19 +10,31 @@ const HOOKS_REGEXP = new RegExp(
   `${HOOKS_FILENAME}(\\.(${METHODS_AVAILABLE}))?\\${FILE_EXT}$`,
 );
 
+interface NextCallback {
+  (): Promise<any>;
+}
+
+interface HookCallback {
+  (request: ServaRequest, next: NextCallback): Promise<any> | any;
+}
+
+export interface RouteCallback {
+  (request: ServaRequest): Promise<any> | any;
+}
+
 type RoutesMap = Map<Route, HookCallback[]>;
 type RoutesStruct = Map<string, RoutesMap>;
 type RouteEntry = [string, [Route, HookCallback[]]];
 
 export default class App {
   private readonly routes: RoutesStruct = new Map();
-  private readonly server: Server;
+  private readonly server: http.Server;
 
   public readonly appPath: string;
 
   public constructor(appPath: string) {
-    this.appPath = resolve(appPath);
-    this.server = serve({
+    this.appPath = path.resolve(appPath);
+    this.server = http.serve({
       port: 4500,
     });
   }
@@ -54,16 +46,16 @@ export default class App {
    * @param {...string[]} path
    * @returns {string}resolve
    */
-  public path(...path: string[]): string {
-    if (path.length === 0) {
+  public path(...paths: string[]): string {
+    if (paths.length === 0) {
       return this.appPath;
     }
 
-    if (path.length === 1 && isAbsolute(path[0])) {
-      return path[0];
+    if (paths.length === 1 && path.isAbsolute(paths[0])) {
+      return paths[0];
     }
 
-    return join(this.appPath, ...path);
+    return path.join(this.appPath, ...paths);
   }
 
   /**
@@ -108,20 +100,20 @@ export default class App {
     const routes: RouteEntry[] = [];
     const globalHooks: RouteEntry[] = [];
 
-    for await (const entry of walk(routesPath)) {
+    for await (const entry of fs.walk(routesPath)) {
       // ignore directories and any non-typescript files
       // todo: support for javascript
       if (entry.isDirectory || !entry.name.endsWith(FILE_EXT)) {
         continue;
       }
 
-      const relativeEntryPath = relative(routesPath, entry.path);
+      const relativeEntryPath = path.relative(routesPath, entry.path);
       const hooksFile = HOOKS_REGEXP.test(relativeEntryPath);
       const method = routeMethod(relativeEntryPath);
-      const path = routePath(relativeEntryPath); // route information
+      const urlPath = routePath(relativeEntryPath); // route information
       const route = createRoute(
         method,
-        path,
+        urlPath,
         entry.path,
       );
 
@@ -211,7 +203,7 @@ export default class App {
    * @param {ServerRequest} req
    * @returns {<Promise<void>} 
    */
-  private async handleRequest(req: ServerRequest): Promise<void> {
+  private async handleRequest(req: http.ServerRequest): Promise<void> {
     // find a matching route
     let route: Route | null = null;
     let stack: HookCallback[] = [];
@@ -320,8 +312,8 @@ async function dispatch(
  * @param {string} path
  * @returns {string}
  */
-function routePath(path: string): string {
-  let name = basename(path, FILE_EXT);
+function routePath(filePath: string): string {
+  let name = path.basename(filePath, FILE_EXT);
   const matched = name.match(
     new RegExp(`.*(?=\.(${METHODS_AVAILABLE})$)`, "i"),
   );
@@ -336,12 +328,12 @@ function routePath(path: string): string {
     name = "*";
   }
 
-  let base = dirname(path);
+  let base = path.dirname(filePath);
   if (base === ".") {
     base = "";
   }
 
-  return "/" + (base ? join(base, name) : name);
+  return "/" + (base ? path.join(base, name) : name);
 }
 
 /**
@@ -354,11 +346,11 @@ function routePath(path: string): string {
  *   routeMethod("/comments/[comment].get.ts")
  *   // => "GET"
  *  
- * @param {string} path The route path with no extensions
+ * @param {string} filePath The route path with no extensions
  * @returns {string}
  */
-function routeMethod(path: string): string {
-  const name = basename(path, FILE_EXT);
+function routeMethod(filePath: string): string {
+  const name = path.basename(filePath, FILE_EXT);
   const matched = name.match(
     new RegExp(`.*(?=\.(${METHODS_AVAILABLE})$)`, "i"),
   );
@@ -379,12 +371,10 @@ function routeMethod(path: string): string {
  * @returns {HookCallback} 
  */
 function wrapRouteCallback(
-  route: Route,
   callback: RouteCallback,
 ): HookCallback {
   return async (request, next) => {
-    const params = route.params(request.url.pathname);
-    const body = await callback(request, params || {});
+    const body = await callback(request);
 
     // if no middleware or the route itself has responded and it returned a body
     // then add the body to the request's response
@@ -422,7 +412,7 @@ function sortRoutes(a: RouteEntry, b: RouteEntry): number {
       }
 
       // order by least path segments
-      return pathA.split(sep).length - pathB.split(sep).length;
+      return pathA.split(path.sep).length - pathB.split(path.sep).length;
     }
   }
 

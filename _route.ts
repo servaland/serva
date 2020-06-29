@@ -1,8 +1,4 @@
-import {
-  pathToRegexp,
-  Key,
-  match,
-} from "./deps.ts";
+import { pathToRegexp } from "./deps.ts";
 
 export interface Route {
   readonly filePath: string;
@@ -27,11 +23,11 @@ export default function create(
 ): Route {
   const glob = path.endsWith("/*");
   const cleaned = cleanPath(path);
-  const keys: Key[] = [];
-  const regexp = pathToRegexp(cleaned, keys, {
+  const keys: pathToRegexp.Key[] = [];
+  const regexp = pathToRegexp.pathToRegexp(cleaned, keys, {
     end: !glob,
   });
-  const matcher = match(cleaned);
+  const matcher = pathToRegexp.match(cleaned);
 
   return {
     filePath,

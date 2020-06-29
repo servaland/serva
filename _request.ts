@@ -1,11 +1,8 @@
-import {
-  ServerRequest,
-  Response,
-} from "https://deno.land/std@0.57.0/http/mod.ts";
 import { Route } from "./_route.ts";
+import { http } from "./deps.ts";
 
 export interface ServaRequest {
-  readonly rawRequest: ServerRequest;
+  readonly rawRequest: http.ServerRequest;
 
   // http request
   readonly url: URL;
@@ -15,8 +12,8 @@ export interface ServaRequest {
 
   // response
   readonly responded: boolean;
-  readonly response: Response;
-  respond: (response: Response) => void;
+  readonly response: http.Response;
+  respond: (response: http.Response) => void;
 }
 
 /**
@@ -26,8 +23,11 @@ export interface ServaRequest {
  * @param {Route} route
  * @returns {ServaRequest}
  */
-export default function create(req: ServerRequest, route: Route): ServaRequest {
-  const response: Response = {};
+export default function create(
+  req: http.ServerRequest,
+  route: Route,
+): ServaRequest {
+  const response: http.Response = {};
   const proto = req.proto.split("/")[0].toLowerCase();
   const url = new URL(req.url, `${proto}://${req.headers.get("host")}`);
 
@@ -37,14 +37,14 @@ export default function create(req: ServerRequest, route: Route): ServaRequest {
     method: req.method,
     params: route.params(url.pathname),
     headers: req.headers,
-    get response(): Response {
+    get response(): http.Response {
       return response;
     },
     get responded(): boolean {
       // @todo: is this a deterministic way to check if the write has started?
       return req.w.usedBufferBytes !== 0;
     },
-    respond: (res: Response) => {
+    respond: (res: http.Response) => {
       // copy each response prop
       for (const [prop, value] of Object.entries(res)) {
         switch (prop) {
