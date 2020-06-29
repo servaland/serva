@@ -4,11 +4,6 @@ import {
 } from "https://deno.land/std@0.57.0/http/mod.ts";
 import { Route } from "./_route.ts";
 
-export interface ServaResponse extends Response {
-  headers: Headers;
-  clearHeaders: () => void;
-}
-
 export interface ServaRequest {
   readonly rawRequest: ServerRequest;
 
@@ -16,11 +11,11 @@ export interface ServaRequest {
   readonly url: URL;
   readonly method: string;
   readonly params: ReadonlyMap<string, string>;
-  readonly headers: ReadonlyMap<string, string>;
+  readonly headers: Headers;
 
   // response
   readonly responded: boolean;
-  readonly response: ServaResponse;
+  readonly response: Response;
   respond: (response: Response) => void;
 }
 
@@ -32,12 +27,7 @@ export interface ServaRequest {
  * @returns {ServaRequest}
  */
 export default function create(req: ServerRequest, route: Route): ServaRequest {
-  const response: ServaResponse = {
-    headers: new Headers(),
-    clearHeaders() {
-      this.headers = new Headers();
-    },
-  };
+  const response: Response = {};
   const proto = req.proto.split("/")[0].toLowerCase();
   const url = new URL(req.url, `${proto}://${req.headers.get("host")}`);
 
@@ -46,8 +36,8 @@ export default function create(req: ServerRequest, route: Route): ServaRequest {
     rawRequest: req,
     method: req.method,
     params: route.params(url.pathname),
-    headers: readonlyHeaders(req.headers),
-    get response(): ServaResponse {
+    headers: req.headers,
+    get response(): Response {
       return response;
     },
     get responded(): boolean {
@@ -65,26 +55,17 @@ export default function create(req: ServerRequest, route: Route): ServaRequest {
             break;
 
           case "headers":
-            // set or merge
-            res.headers!.forEach((value, name) => {
-              response.headers.set(name, value);
-            });
+            if (response.headers) {
+              // merge headers
+              res.headers!.forEach((value, name) => {
+                response.headers!.set(name, value);
+              });
+            } else {
+              response.headers = new Headers(res.headers!);
+            }
             break;
         }
       }
     },
   };
-}
-
-/**
- * Returns a ReadonlyMap copy of given headers.
- * 
- * @param {Headers} headers
- * @returns {Map} 
- */
-function readonlyHeaders(headers: Headers): ReadonlyMap<string, string> {
-  const map = new Map();
-  headers.forEach((value, key) => map.set(value, key));
-
-  return map;
 }

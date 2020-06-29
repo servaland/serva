@@ -1,11 +1,9 @@
-import { registerRoute } from "../../registers.ts";
+import { RouteCallback } from "../../registers.ts";
 
-export default registerRoute(() =>
-  ({ respond }) =>
-    respond({
-      body: "Hello from Serva",
-      headers: new Headers({
-        "X-Powered-By": "Serva",
-      }),
-    })
-);
+export default (): RouteCallback => (({ respond }) =>
+  respond({
+    body: "Hello from Serva.",
+    headers: new Headers({
+      "X-Powered-By": "Serva",
+    }),
+  }));
