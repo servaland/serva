@@ -9,7 +9,6 @@ export interface Route {
   readonly method: string;
   readonly path: string;
   readonly regexp: RegExp;
-  readonly paramNames: (string | number)[];
   params: (path: string) => Map<string, string>;
 }
 
@@ -32,7 +31,6 @@ export default function create(
   const regexp = pathToRegexp(cleaned, keys, {
     end: !glob,
   });
-  const paramNames = keys.map((key) => key.name);
   const matcher = match(cleaned);
 
   return {
@@ -40,7 +38,6 @@ export default function create(
     path,
     method,
     regexp,
-    paramNames,
     params(path: string): Map<string, string> {
       const matches = matcher(path);
       return new Map(matches ? Object.entries(matches.params) : []);
