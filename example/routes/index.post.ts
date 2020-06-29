@@ -2,7 +2,7 @@ import { ServaRequest } from "../../mod.ts";
 
 export default ({ respond }: ServaRequest) =>
   respond({
-    body: "Hello from Serva.",
+    body: "Wait a minute, please Mr. POST-man",
     headers: new Headers({
       "X-Powered-By": "Serva",
     }),

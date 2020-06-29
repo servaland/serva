@@ -2,29 +2,16 @@ import createRequest, { ServaRequest } from "./_request.ts";
 import createRoute, { Route } from "./_route.ts";
 import { fs, http, path } from "./deps.ts";
 
-const METHODS_AVAILABLE = "get|post|put|options|delete|patch";
+const METHODS_AVAILABLE = "get|post|put|delete|patch";
 const ROUTES_DIR = "routes";
-const HOOKS_FILENAME = "_hooks";
 const FILE_EXT = ".ts";
-const HOOKS_REGEXP = new RegExp(
-  `${HOOKS_FILENAME}(\\.(${METHODS_AVAILABLE}))?\\${FILE_EXT}$`,
-);
-
-interface NextCallback {
-  (): Promise<any>;
-}
-
-interface HookCallback {
-  (request: ServaRequest, next: NextCallback): Promise<any> | any;
-}
 
 export interface RouteCallback {
   (request: ServaRequest): Promise<any> | any;
 }
 
-type RoutesMap = Map<Route, HookCallback[]>;
-type RoutesStruct = Map<string, RoutesMap>;
-type RouteEntry = [string, [Route, HookCallback[]]];
+type RouteEntry = [Route, RouteCallback];
+type RoutesStruct = Map<string, RouteEntry[]>;
 
 export default class App {
   private readonly routes: RoutesStruct = new Map();
@@ -97,8 +84,7 @@ export default class App {
       throw new Error(`${routesPath} not found`);
     }
 
-    const routes: RouteEntry[] = [];
-    const globalHooks: RouteEntry[] = [];
+    const routes: [string, RouteEntry][] = [];
 
     for await (const entry of fs.walk(routesPath)) {
       // ignore directories and any non-typescript files
@@ -108,7 +94,6 @@ export default class App {
       }
 
       const relativeEntryPath = path.relative(routesPath, entry.path);
-      const hooksFile = HOOKS_REGEXP.test(relativeEntryPath);
       const method = routeMethod(relativeEntryPath);
       const urlPath = routePath(relativeEntryPath); // route information
       const route = createRoute(
@@ -118,15 +103,15 @@ export default class App {
       );
 
       // register route
-      let routeFactory: any;
+      let callback: RouteCallback;
       try {
         let filePath = entry.path;
         if (remount) {
           filePath += "#" + Math.random();
         }
 
-        ({ default: routeFactory } = await import(filePath));
-        if (typeof routeFactory !== "function") {
+        ({ default: callback } = await import(filePath));
+        if (typeof callback !== "function") {
           throw new TypeError(
             `file://${route.filePath} default export is not a callback.`,
           );
@@ -136,63 +121,26 @@ export default class App {
         continue;
       }
 
-      let hooks: HookCallback[];
-      let callback: RouteCallback;
-
-      const factory = (routeFactory[Symbol.for("serva.route_factory")] ||
-        routeFactory[Symbol.for("serva.hooks_factory")])
-        ? routeFactory
-        : (hooksFile
-          ? registerHooks(routeFactory)
-          : registerRoute(routeFactory));
-
-      if (hooksFile) {
-        hooks = await factory(route);
-      } else {
-        [hooks, callback] = await factory(route);
-      }
-
-      // set routes/hooks
-      if (hooksFile) {
-        globalHooks.push([
+      routes.push(
+        [
           route.method,
-          [route, hooks],
-        ]);
-      } else {
-        routes.push(
-          [
-            route.method,
-            [route, [...hooks, wrapRouteCallback(route, callback!)]],
-          ],
-        );
-      }
+          [route, callback!],
+        ],
+      );
     }
 
     // sort the routes
-    globalHooks.sort(sortRoutes);
     routes.sort(sortRoutes);
 
-    // merge global hooks to routes
-    routes.forEach((entry) => {
-      const [method, [route, hooks]] = entry;
-      const methodRoutes = this.routes.get(method) || new Map();
+    // replace routes
+    this.routes.clear();
+    routes.forEach(([method, entry]) => {
+      const entries = this.routes.get(method) || [];
+      entries.push(entry);
 
-      // fake route path
-      const pathLike = route.path.replace(/\[.+\]/g, "a");
-
-      // test the hooks path if it matches the route path
-      // @todo: clean this code up, looks messy
-      const injectedHooks = globalHooks.filter((entry) => {
-        const [hookMethod] = entry;
-        return (hookMethod === method || hookMethod === "*") &&
-          entry[1][0].regexp.test(pathLike);
-      }).map((entry) => entry[1][1]).reduce(
-        (all, hooks) => all.concat(hooks),
-        [],
-      );
-
-      methodRoutes.set(route, injectedHooks.concat(hooks));
-      this.routes.set(method, methodRoutes);
+      if (entries.length === 1) {
+        this.routes.set(method, entries);
+      }
     });
   }
 
@@ -205,8 +153,8 @@ export default class App {
    */
   private async handleRequest(req: http.ServerRequest): Promise<void> {
     // find a matching route
-    let route: Route | null = null;
-    let stack: HookCallback[] = [];
+    let route: Route;
+    let callback: RouteCallback;
     const { pathname } = new URL(req.url, "https://serva.land");
 
     const possibleMethods = [req.method, "*"];
@@ -215,20 +163,21 @@ export default class App {
     }
 
     possibleMethods.some((m) => {
-      const routes = this.routes.get(m);
-      if (routes) {
-        for (const r of routes.keys()) {
+      const entries = this.routes.get(m);
+      if (entries) {
+        return entries.some(([r, cb]) => {
           if (r.regexp.test(pathname)) {
             route = r;
-            stack = routes.get(r)!;
+            callback = cb;
             // route found
             return true;
           }
-        }
+        });
       }
     });
 
     // not found
+    // @ts-ignore
     if (!route) {
       req.respond({
         status: 404,
@@ -237,66 +186,18 @@ export default class App {
     }
 
     const request = createRequest(req, route);
+    const body = await callback!(request);
 
-    try {
-      await dispatch(stack, request);
-    } catch (err) {
-      // todo: error handling
-      throw err;
-    } finally {
-      // if nobody has responded, send the current request's response
-      if (!request.responded) {
-        req.respond(request.response);
-      }
+    // allow return values to set the body
+    if (body !== undefined) {
+      request.respond({ body });
+    }
+
+    // if nobody has responded, send the current request's response
+    if (!request.responded) {
+      req.respond(request.response);
     }
   }
-}
-
-/**
- * Dispatch the callback stack with a given request object.
- *
- * @example
- *   async function one(request, next) {
- *     console.log("enter: one");
- *     await next();
- *     console.log("exit: one");
- *   }
- *
- *   async function two(request, next) {
- *     console.log("enter: two");
- *     await next();
- *     console.log("exit: two");
- *   }
- *
- *   await dispatch([one, two], request);
- *   // => "enter: one"
- *   // => "enter: two"
- *   // => "exit: two"
- *   // => "exit: one"
- *
- * @param {CallbackHook[]} callbacks
- * @param {ServaRequest} request
- * @returns {Promise<any>}
- */
-async function dispatch(
-  callbacks: (HookCallback)[],
-  request: ServaRequest,
-): Promise<any> {
-  let i = -1;
-
-  const next = (current = 0): Promise<any> => {
-    if (current <= i) {
-      throw new Error("next() already called");
-    }
-
-    const cb = callbacks[i = current];
-
-    return Promise.resolve(
-      cb ? cb(request, next.bind(undefined, i + 1)) : undefined,
-    );
-  };
-
-  return next();
 }
 
 /**
@@ -324,8 +225,6 @@ function routePath(filePath: string): string {
 
   if (name === "index") {
     name = "";
-  } else if (name === HOOKS_FILENAME) {
-    name = "*";
   }
 
   let base = path.dirname(filePath);
@@ -364,39 +263,19 @@ function routeMethod(filePath: string): string {
 }
 
 /**
- * Wraps a route callback returning a hook callback.
- * 
- * @param {Route} route 
- * @param {RouteCallback} callback
- * @returns {HookCallback} 
- */
-function wrapRouteCallback(
-  callback: RouteCallback,
-): HookCallback {
-  return async (request, next) => {
-    const body = await callback(request);
-
-    // if no middleware or the route itself has responded and it returned a body
-    // then add the body to the request's response
-    if (body !== undefined) {
-      request.respond({ body });
-    }
-
-    return next();
-  };
-}
-
-/**
  * Sort function for routes.
  *
  * @param {RouteEntry} a
  * @param {RouteEntry} b
  * @returns {number}
  */
-function sortRoutes(a: RouteEntry, b: RouteEntry): number {
+function sortRoutes(a: [string, RouteEntry], b: [string, RouteEntry]): number {
+  const [methodA, [routeA]] = a;
+  const [methodB, [routeB]] = b;
+
   // find params and insert placeholders
-  const pathA = a[1][0].path.replace(/\[.+\]/g, "\0");
-  const pathB = b[1][0].path.replace(/\[.+\]/g, "\0");
+  const pathA = routeA.path.replace(/\[.+\]/g, "\0");
+  const pathB = routeB.path.replace(/\[.+\]/g, "\0");
 
   // compare each character of the urls
   for (let i = 0, l = Math.min(pathA.length, pathB.length); i < l; ++i) {
@@ -417,8 +296,8 @@ function sortRoutes(a: RouteEntry, b: RouteEntry): number {
   }
 
   // compare methods
-  if (a[0] === "*" || b[0] === "*") {
-    return b[0].charCodeAt(0) - a[0].charCodeAt(0);
+  if (methodA === "*" || methodB === "*") {
+    return methodB.charCodeAt(0) - methodA.charCodeAt(0);
   }
 
   return 0;

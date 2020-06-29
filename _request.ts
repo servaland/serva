@@ -2,7 +2,7 @@ import { Route } from "./_route.ts";
 import { http } from "./deps.ts";
 
 export interface ServaRequest {
-  readonly rawRequest: http.ServerRequest;
+  readonly httpRequest: http.ServerRequest;
 
   // http request
   readonly url: URL;
@@ -33,7 +33,7 @@ export default function create(
 
   return {
     url,
-    rawRequest: req,
+    httpRequest: req,
     method: req.method,
     params: route.params(url.pathname),
     headers: req.headers,
