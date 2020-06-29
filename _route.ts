@@ -2,7 +2,7 @@ import {
   pathToRegexp,
   Key,
   match,
-} from "https://raw.githubusercontent.com/pillarjs/path-to-regexp/v6.1.0/src/index.ts";
+} from "./deps.ts";
 
 export interface Route {
   readonly filePath: string;
