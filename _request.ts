@@ -11,9 +11,7 @@ export interface ServaRequest {
   readonly headers: Headers;
 
   // response
-  readonly responded: boolean;
   readonly response: http.Response;
-  respond: (response: http.Response) => void;
 }
 
 /**
@@ -39,33 +37,6 @@ export default function create(
     headers: req.headers,
     get response(): http.Response {
       return response;
-    },
-    get responded(): boolean {
-      // @todo: is this a deterministic way to check if the write has started?
-      return req.w.usedBufferBytes !== 0;
-    },
-    respond: (res: http.Response) => {
-      // copy each response prop
-      for (const [prop, value] of Object.entries(res)) {
-        switch (prop) {
-          case "trailers":
-          case "status":
-          case "body":
-            response[prop] = value;
-            break;
-
-          case "headers":
-            if (response.headers) {
-              // merge headers
-              res.headers!.forEach((value, name) => {
-                response.headers!.set(name, value);
-              });
-            } else {
-              response.headers = new Headers(res.headers!);
-            }
-            break;
-        }
-      }
     },
   };
 }

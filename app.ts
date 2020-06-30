@@ -256,11 +256,11 @@ export default class App {
 
     // allow return values to set the body
     if (body !== undefined) {
-      request.respond({ body });
+      request.response.body = body;
     }
 
     // if nobody has responded, send the current request's response
-    if (!request.responded) {
+    if (request.httpRequest.w.usedBufferBytes === 0) {
       req.respond(request.response);
     }
   }
