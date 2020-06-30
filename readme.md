@@ -244,11 +244,11 @@ into the same pattern.
 ## Roadmap
 
 - ✅ Routes
-- 🏗️ Hooks (middleware)
-- 🗓️ Services
-- 🗓️ Configurations
-- 🗓️ CLI
-- 🗓️ Explorer
+- 🏗️ [Hooks](https://github.com/servaland/serva/milestone/1) (middleware)
+- 🗓️ [Services](https://github.com/servaland/serva/milestone/2)
+- 🗓️ [Configuration](https://github.com/servaland/serva/milestone/3)
+- 🗓️ [CLI](https://github.com/servaland/serva/milestone/4)
+- 🗓️ [Explorer](https://github.com/servaland/serva/milestone/5)
 
 _Key_
 
