@@ -33,7 +33,7 @@ a `serva.config.json` for any low-level config (port, hostnames, etc.).
 
 ### Routes
 
-All routes live instead the `routes` directory. They are a mirrored representation
+All routes live inside the `routes` directory. They are a mirrored representation
 of your app's endpoints. Lets look at an example directory of the Serva package.
 
 ```
