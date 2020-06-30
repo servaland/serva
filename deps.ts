@@ -1,4 +1,4 @@
-export { parse, Args } from "https://deno.land/std@0.57.0/flags/mod.ts";
+export * as flags from "https://deno.land/std@0.57.0/flags/mod.ts";
 
 // fs contains unstable features just re-export under fs
 import { readJson } from "https://deno.land/std@0.57.0/fs/read_json.ts";

@@ -1,8 +1,6 @@
 import createRequest, { ServaRequest } from "./_request.ts";
 import createRoute, { Route } from "./_route.ts";
-import { fs, http, path } from "./deps.ts";
-
-const ROUTES_DIR = "routes";
+import { fs, http, path, flags } from "./deps.ts";
 
 export interface RouteCallback {
   (request: ServaRequest): Promise<any> | any;
@@ -15,6 +13,8 @@ export interface ServaConfig {
   methods: string[];
 }
 
+const ROUTES_DIR = "routes";
+
 const DEFAULT_CONFIG = Object.freeze({
   port: 4500,
   extension: ".ts",
@@ -24,13 +24,35 @@ const DEFAULT_CONFIG = Object.freeze({
 type RouteEntry = [Route, RouteCallback];
 type RoutesStruct = Map<string, RouteEntry[]>;
 
-export default class App {
+class App {
   private readonly routes: RoutesStruct = new Map();
   private readonly server?: http.Server;
 
   public readonly appPath: string;
   public readonly config: ServaConfig = Object.assign({}, DEFAULT_CONFIG);
 
+  /**
+   * Run main.
+   * 
+   * @param {string[]} args
+   * @returns {void}
+   */
+  public static main(args: string[]) {
+    const { _: [command, dir = "."] } = flags.parse(args);
+
+    if (command !== "start") {
+      throw new Error(`Unknown command: ${command}`);
+    }
+
+    const app = new this(dir.toString());
+    app.start();
+  }
+
+  /**
+   * Creates a new App instance.
+   * 
+   * @param {string} appPath Application root path.
+   */
   public constructor(appPath: string) {
     this.appPath = path.resolve(appPath);
   }
@@ -369,4 +391,9 @@ function sortRoutes(a: [string, RouteEntry], b: [string, RouteEntry]): number {
   }
 
   return 0;
+}
+
+// run
+if (import.meta.main) {
+  App.main(Deno.args);
 }
