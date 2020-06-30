@@ -131,7 +131,7 @@ export default ({ response }: ServaRequest) => {
   // set trailers
   response.trailers = () =>
     new Headers({
-      "X-WATCH": "https://youtu.be/m8e-FF8MsqU",
+      "X-Watch-Me": "https://youtu.be/dQw4w9WgXcQ",
     });
 
   // return to set the body
@@ -209,7 +209,7 @@ $ serva start
 ## Philosophy
 
 Serva was built to let developers focus on what really matters, the application.
-Many Node.js frameworksallow developers to setup servers 1001 different ways. Through-out
+Many Node.js frameworks allow developers to setup servers 1001 different ways. Through-out
 developing and maintaining Node.js apps, each one looks slightly different and you
 can become lost in how the original developer decided to setup on that day. Let
 the framework worry about this setup and make Deno apps consistent, let's not fall
@@ -229,4 +229,4 @@ into the same pattern.
 
 _Key_
 
-<small>✅ done<br />🏗️ development<br />🗓️ planned</small>
+<small>🗓️ planned<br />🏗️ development<br />✅ done</small>
