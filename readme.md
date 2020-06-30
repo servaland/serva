@@ -1,6 +1,6 @@
 # 🦕 Serva
 
-The zero setup web framework for [Deno](https://deno.land). `Convention > Configuration`,
+The zero setup web framework for [Deno](https://deno.land). Convention > Configuration,
 focus on building your app, let Serva do the _REST_.
 
 _Define a route_
