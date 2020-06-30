@@ -70,6 +70,29 @@ configured to accept more, see [Method suffix](#method-suffixes).
 If the method suffix is omitted, Serva will bind _any_/_all_ methods to that route.
 Serva will first try to match any defined methods before using an any route.
 
+#### Parameters
+
+Routes can contain parameters within their path. Parameters are a way to bind segments
+of the path to the request `params` map. Use square brackets around the name of a
+parameter within the filename.
+
+```
+$ mkdir ./example/routes/profile
+$ touch ./example/routes/profile/[name].get.ts
+```
+
+```ts
+// ./example/routes/profile/[name].get.ts
+import { ServaRequest } from "https://serva.land/serva@latest/mod.ts";
+
+export default ({ params }: ServaRequest) => `Welcome ${params.get("name"}.`;
+```
+
+```
+$ curl localhost:4500/profile/chris
+Welcome chris.
+```
+
 #### Callbacks
 
 Each route must contain a default export as a function. This function is known as
@@ -78,7 +101,7 @@ the request.
 
 ```ts
 // ./example/routes/index.get.ts
-import { ServaRequest } from "https://serva.land/serva@0.0.1/mod.ts";
+import { ServaRequest } from "https://serva.land/serva@latest/mod.ts";
 
 export default ({ response }: ServaRequest) => {
   response.headers = new Headers({
@@ -117,7 +140,7 @@ Serva exposes a single response object that you can manipulate within your route
 
 ```ts
 // ./example/routes/index.get.ts
-import { ServaRequest } from "https://serva.land/serva@0.0.1/mod.ts";
+import { ServaRequest } from "https://serva.land/serva@latest/mod.ts";
 
 export default ({ response }: ServaRequest) => {
   // set headers
@@ -186,7 +209,7 @@ instantiate and run an app. To start an application is easy, just tell the _app_
 file to `start` with a few permissions.
 
 ```
-$ deno run --allow-read --allow-net https://serva.land/serva@0.0.1/app.ts start
+$ deno run --allow-read --allow-net https://serva.land/serva@latest/app.ts start
 ```
 
 Serva requires the following Deno flags to start:
@@ -202,7 +225,7 @@ Alternatively you can install Serva as a Deno binary. If you have configured Den
 correctly you will be able to use the `serva` alias to start an application.
 
 ```
-$ deno install --allow-read --allow-net https://serva.land/serva@0.0.1/app.ts
+$ deno install --allow-read --allow-net https://serva.land/serva@latest/app.ts
 $ serva start
 ```
 
