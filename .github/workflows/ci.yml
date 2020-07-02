@@ -1,21 +1,20 @@
-name: CI
+name: ci
 
-on:
-  pull_request:
-    branches: [ master ]
+on: [push, pull_request]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  accepts:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-    - name: Setup Deno environment
-    - uses: denolib/setup-deno@v2.0.0
+      - uses: actions/checkout@v2
+      - uses: denolib/setup-deno@master
+        with:
+          deno-version: 1.0.0
 
-    - uses: actions/checkout@v2
-
-    - name: Deno version
-      run: deno --version
-    
-    - name: Deno test
-      run: deno -A test
+      - run: deno --version
+      - run: deno fmt --check
+      - run: deno test -A
