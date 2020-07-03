@@ -87,7 +87,7 @@ $ touch ./example/routes/profile/[name].get.ts
 
 ```ts
 // ./example/routes/profile/[name].get.ts
-import { ServaRequest } from "https://serva.land/serva@latest/mod.ts";
+import { ServaRequest } from "https://serva.land/serva/mod.ts";
 
 export default ({ params }: ServaRequest) => `Welcome ${params.get("name"}.`;
 ```
@@ -105,7 +105,7 @@ the request.
 
 ```ts
 // ./example/routes/index.get.ts
-import { ServaRequest } from "https://serva.land/serva@latest/mod.ts";
+import { ServaRequest } from "https://serva.land/serva/mod.ts";
 
 export default ({ response }: ServaRequest) => {
   response.headers = new Headers({
@@ -144,7 +144,7 @@ Serva exposes a single response object that you can manipulate within your route
 
 ```ts
 // ./example/routes/index.get.ts
-import { ServaRequest } from "https://serva.land/serva@latest/mod.ts";
+import { ServaRequest } from "https://serva.land/serva/mod.ts";
 
 export default ({ response }: ServaRequest) => {
   // set headers
@@ -213,7 +213,7 @@ instantiate and run an app. To start an application is easy, just tell the _app_
 file to `start` with a few permissions.
 
 ```
-$ deno run --allow-read --allow-net https://serva.land/serva@latest/app.ts start
+$ deno run --allow-read --allow-net https://serva.land/serva/app.ts start
 ```
 
 Serva requires the following Deno flags to start:
@@ -229,7 +229,7 @@ Alternatively you can install Serva as a Deno binary. If you have configured Den
 correctly you will be able to use the `serva` alias to start an application.
 
 ```
-$ deno install --allow-read --allow-net https://serva.land/serva@latest/app.ts
+$ deno install --allow-read --allow-net https://serva.land/serva/app.ts
 $ serva start
 ```
 
