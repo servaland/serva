@@ -229,7 +229,7 @@ Alternatively you can install Serva as a Deno binary. If you have configured Den
 correctly you will be able to use the `serva` alias to start an application.
 
 ```
-$ deno install --allow-read --allow-net https://serva.land/serva/app.ts
+$ deno install --name serva --allow-read --allow-net https://serva.land/serva/app.ts
 $ serva start
 ```
 
