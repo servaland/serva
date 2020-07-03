@@ -230,7 +230,7 @@ export default class App {
       // register route
       let callback: RouteCallback;
       try {
-        let filePath = entry.path;
+        let filePath = `file://${entry.path}`;
         if (remount) {
           filePath += "#" + Math.random();
         }
@@ -238,7 +238,7 @@ export default class App {
         ({ default: callback } = await import(filePath));
         if (typeof callback !== "function") {
           throw new TypeError(
-            `file://${route.filePath} default export is not a callback.`,
+            `${route.filePath} default export is not a callback.`,
           );
         }
       } catch (err) {
