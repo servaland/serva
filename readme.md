@@ -41,8 +41,12 @@ $ tree ./example
 example
 ├── routes
 │   ├── index.get.ts
-│   └── index.post.ts
+│   ├── index.post.ts
+│   └── profile
+│       └── [name].get.ts
 └── serva.config.json
+
+2 directories, 4 files
 ```
 
 Without reading a single line of code you can see the available routes your app
