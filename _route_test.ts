@@ -9,6 +9,7 @@ Deno.test("basicRouteObject", () => {
     filePath: "/routes/index.get.ts",
     path: "/",
     method: "GET",
+    paramNames: [],
     regexp: pathToRegexp.pathToRegexp("/"),
   });
 });
@@ -20,6 +21,7 @@ Deno.test("nonEndingRouteObject", () => {
     filePath: "/routes/_hook.ts",
     path: "/*",
     method: "GET",
+    paramNames: [],
     regexp: pathToRegexp.pathToRegexp("/", [], {
       end: false,
     }),
@@ -27,12 +29,13 @@ Deno.test("nonEndingRouteObject", () => {
 });
 
 Deno.test("routeParams", () => {
-  const { params } = createRoute(
+  const { params, paramNames } = createRoute(
     "GET",
     "/[first]-[last]/comments/[comment]/view",
     "./routes/[first]-[last]/comments/[comment]/view.get.ts",
   );
 
+  assertEquals(paramNames, ["first", "last", "comment"]);
   assertEquals(
     params("/chris-turner/comments/123/view"),
     new Map([["first", "chris"], ["last", "turner"], ["comment", "123"]]),
