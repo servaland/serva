@@ -1,6 +1,10 @@
 import { Route } from "./_route.ts";
 import { http } from "./deps.ts";
 
+interface ServaResponse extends http.Response {
+  body?: any; // allow routes to return anything
+}
+
 export interface ServaRequest {
   readonly httpRequest: http.ServerRequest;
 
@@ -11,7 +15,7 @@ export interface ServaRequest {
   readonly headers: Headers;
 
   // response
-  readonly response: http.Response;
+  readonly response: ServaResponse;
 }
 
 /**
@@ -25,7 +29,7 @@ export default function create(
   req: http.ServerRequest,
   route: Route,
 ): ServaRequest {
-  const response: http.Response = {};
+  const response: ServaResponse = {};
   const proto = req.proto.split("/")[0].toLowerCase();
   const url = new URL(req.url, `${proto}://${req.headers.get("host")}`);
 
@@ -35,7 +39,7 @@ export default function create(
     method: req.method,
     params: route.params(url.pathname),
     headers: req.headers,
-    get response(): http.Response {
+    get response(): ServaResponse {
       return response;
     },
   };

@@ -334,6 +334,18 @@ export default class App {
 
     // if nobody has responded, send the current request's response
     if (request.httpRequest.w.usedBufferBytes === 0) {
+      const { response } = request;
+
+      // detect json response
+      const tryJSON = !validHttpResponseBody(response.body);
+      if (tryJSON) {
+        response.body = JSON.stringify(response.body);
+        const headers = response.headers || (response.headers = new Headers());
+
+        // set the
+        headers.set("content-type", "application/json; charset=utf-8");
+      }
+
       req.respond(request.response);
     }
   }
@@ -484,4 +496,19 @@ function routeToRequestCallback(callback: RouteCallback): OnRequestCallback {
     }
     return next();
   };
+}
+
+function validHttpResponseBody(body: any): boolean {
+  switch (typeof body) {
+    case "undefined":
+    case "string":
+      return true;
+
+    case "object":
+      return body &&
+        (body instanceof Uint8Array || typeof body.read === "function");
+
+    default:
+      return false;
+  }
 }
