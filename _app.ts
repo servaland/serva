@@ -1,3 +1,4 @@
+import { RouteFactory } from "./_factories.ts";
 import createRequest, { ServaRequest } from "./_request.ts";
 import createRoute, { Route } from "./_route.ts";
 import { fs, http, path, flags } from "./deps.ts";
@@ -228,7 +229,7 @@ export default class App {
       );
 
       // register route
-      let callback: RouteCallback;
+      let callback: unknown;
       try {
         let filePath = `file://${entry.path}`;
         if (remount) {
@@ -246,10 +247,24 @@ export default class App {
         continue;
       }
 
+      // check if the export was a factory
+      // @ts-ignore https://github.com/Microsoft/TypeScript/issues/1863
+      const factory = callback[Symbol.for("serva_factory")];
+      if (factory) {
+        switch (factory) {
+          case "route":
+            callback = (callback as RouteFactory)(route);
+            break;
+
+          default:
+            throw new Error(`Factory (${factory}) not implemented`);
+        }
+      }
+
       routes.push(
         [
           route.method,
-          [route, callback!],
+          [route, callback! as RouteCallback],
         ],
       );
     }

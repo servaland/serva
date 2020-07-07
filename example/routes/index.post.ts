@@ -1,10 +1,12 @@
 // ./example/routes/index.post.ts
-import { ServaRequest } from "../../mod.ts";
+import { route } from "../../mod.ts";
 
-export default ({ response }: ServaRequest) => {
-  response.headers = new Headers({
-    "X-Powered-By": "Serva",
-  });
+export default route(() =>
+  ({ response }) => {
+    response.headers = new Headers({
+      "X-Powered-By": "Serva",
+    });
 
-  return "Wait a minute, please Mr. POST-man.";
-};
+    return "Wait a minute, please Mr. POST-man.";
+  }
+);
