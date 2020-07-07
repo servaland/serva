@@ -5,6 +5,7 @@ export interface Route {
   readonly method: string;
   readonly path: string;
   readonly regexp: RegExp;
+  readonly paramNames: Array<string | number>;
   params: (path: string) => Map<string, string>;
 }
 
@@ -34,6 +35,7 @@ export default function create(
     path,
     method,
     regexp,
+    paramNames: keys.map((k) => k.name),
     params(path: string): Map<string, string> {
       const matches = matcher(path);
       return new Map(matches ? Object.entries(matches.params) : []);

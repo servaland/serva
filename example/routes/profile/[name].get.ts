@@ -1,10 +1,12 @@
 // ./example/routes/index.get.ts
-import { ServaRequest } from "../../../mod.ts";
+import { route } from "../../../mod.ts";
 
-export default ({ response, params }: ServaRequest) => {
-  response.headers = new Headers({
-    "X-Powered-By": "Serva",
-  });
+export default route(() =>
+  ({ response, params }) => {
+    response.headers = new Headers({
+      "X-Powered-By": "Serva",
+    });
 
-  return `Welcome ${params.get("name")}.`;
-};
+    return `Welcome ${params.get("name")}.`;
+  }
+);
