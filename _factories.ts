@@ -1,11 +1,13 @@
+import { RouteCallback, OnRequestCallback } from "./_app.ts";
 import { Route } from "./_route.ts";
-import { RouteCallback } from "./_app.ts";
 
 export interface RouteFactory {
-  (route: Route): RouteCallback;
+  (route: Route): [OnRequestCallback[], RouteCallback];
 }
 
-interface RouteApi {}
+interface RouteApi {
+  onRequest: (callback: OnRequestCallback) => void;
+}
 
 interface RouteMeta {
   method: string;
@@ -16,12 +18,17 @@ interface RouteMeta {
 export function route(
   callback: (api: RouteApi, meta: RouteMeta) => RouteCallback,
 ): RouteFactory {
-  function routeFactory(route: Route) {
-    return callback({}, {
+  function routeFactory(route: Route): [any[], RouteCallback] {
+    const hooks: any[] = [];
+    const cb = callback({
+      onRequest: hooks.push.bind(hooks),
+    }, {
       method: route.method,
       path: route.path,
       paramNames: route.paramNames,
     });
+
+    return [hooks, cb];
   }
 
   // signal to the app this is a factory
