@@ -6,29 +6,16 @@ export interface RouteFactory {
 }
 
 interface RouteApi {
+  route: Route;
   onRequest: (callback: OnRequestCallback) => void;
 }
 
-interface RouteMeta {
-  method: string;
-  path: string;
-  paramNames: Array<string | number>;
-}
-
 export function route(
-  callback: (api: RouteApi, meta: RouteMeta) => RouteCallback,
+  callback: (api: RouteApi) => RouteCallback,
 ): RouteFactory {
   function routeFactory(route: Route): [any[], RouteCallback] {
     const hooks: any[] = [];
-    const cb = callback({
-      onRequest: hooks.push.bind(hooks),
-    }, {
-      method: route.method,
-      path: route.path,
-      paramNames: route.paramNames,
-    });
-
-    return [hooks, cb];
+    return [hooks, callback({ onRequest: hooks.push.bind(hooks), route })];
   }
 
   // signal to the app this is a factory

@@ -30,7 +30,7 @@ export default function create(
   });
   const matcher = pathToRegexp.match(cleaned);
 
-  return {
+  return Object.freeze({
     filePath,
     path,
     method,
@@ -40,7 +40,7 @@ export default function create(
       const matches = matcher(path);
       return new Map(matches ? Object.entries(matches.params) : []);
     },
-  };
+  });
 }
 
 /**
