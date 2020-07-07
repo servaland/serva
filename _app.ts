@@ -26,7 +26,7 @@ const DEFAULT_CONFIG = Object.freeze({
   methods: "get|post|put|delete|patch".split("|"),
 });
 
-type RouteEntry = [Route, RouteCallback];
+type RouteEntry = [Route, OnRequestCallback[]];
 type RoutesStruct = Map<string, RouteEntry[]>;
 
 export default class App {
@@ -216,10 +216,10 @@ export default class App {
 
     const routes: [string, RouteEntry][] = [];
 
-    for await (const entry of fs.walk(routesPath)) {
-      // ignore directories and any non-typescript files
+    for await (const entry of fs.walk(routesPath, { includeDirs: false })) {
+      // ignore any non-typescript files
       // todo: support for javascript
-      if (entry.isDirectory || !entry.name.endsWith(this.config.extension)) {
+      if (!entry.name.endsWith(this.config.extension)) {
         continue;
       }
 
@@ -254,10 +254,10 @@ export default class App {
       // check if the export was a factory
       // @ts-ignore https://github.com/Microsoft/TypeScript/issues/1863
       const factory = callback[Symbol.for("serva_factory")];
+      let hooks: OnRequestCallback[] = [];
       if (factory) {
         switch (factory) {
           case "route":
-            let hooks;
             [hooks, callback] = (callback as RouteFactory)(route);
             break;
 
@@ -269,7 +269,10 @@ export default class App {
       routes.push(
         [
           route.method,
-          [route, callback! as RouteCallback],
+          [
+            route,
+            hooks.concat(routeToRequestCallback(callback as RouteCallback)),
+          ],
         ],
       );
     }
@@ -295,7 +298,7 @@ export default class App {
   private async handleRequest(req: http.ServerRequest): Promise<void> {
     // find a matching route
     let route: Route;
-    let callback: RouteCallback;
+    let callbacks: OnRequestCallback[] = [];
     const { pathname } = new URL(req.url, "https://serva.land");
 
     const possibleMethods = [req.method, "*"];
@@ -306,10 +309,10 @@ export default class App {
     possibleMethods.some((m) => {
       const entries = this.routes.get(m);
       if (entries) {
-        return entries.some(([r, cb]) => {
+        return entries.some(([r, cbs]) => {
           if (r.regexp.test(pathname)) {
             route = r;
-            callback = cb;
+            callbacks = cbs;
             // route found
             return true;
           }
@@ -327,12 +330,7 @@ export default class App {
     }
 
     const request = createRequest(req, route);
-    const body = await callback!(request);
-
-    // allow return values to set the body
-    if (body !== undefined) {
-      request.response.body = body;
-    }
+    await dispatch(callbacks, request);
 
     // if nobody has responded, send the current request's response
     if (request.httpRequest.w.usedBufferBytes === 0) {
@@ -444,4 +442,32 @@ function sortRoutes(a: [string, RouteEntry], b: [string, RouteEntry]): number {
   }
 
   return 0;
+}
+
+function dispatch(callbacks: OnRequestCallback[], request: ServaRequest) {
+  let i = -1;
+  const next = (current = 0): Promise<any> => {
+    if (current <= i) {
+      throw new Error("next() already called");
+    }
+
+    const cb = callbacks[i = current];
+
+    return Promise.resolve(
+      cb ? cb(request, next.bind(undefined, i + 1)) : undefined,
+    );
+  };
+
+  return next();
+}
+
+function routeToRequestCallback(callback: RouteCallback): OnRequestCallback {
+  return async function (request, next) {
+    const body = callback(request);
+    if (body !== undefined) {
+      request.response.body = body;
+    }
+
+    return next();
+  };
 }
