@@ -498,6 +498,12 @@ function routeToRequestCallback(callback: RouteCallback): OnRequestCallback {
   };
 }
 
+/**
+ * Chek if a given body is a valid Http response type.
+ *
+ * @param {any} body
+ * @returns {boolean}
+ */
 function validHttpResponseBody(body: any): boolean {
   switch (typeof body) {
     case "undefined":
