@@ -3,6 +3,10 @@ import createRequest, { ServaRequest } from "./_request.ts";
 import createRoute, { Route } from "./_route.ts";
 import { fs, http, path, flags } from "./deps.ts";
 
+export interface OnRequestCallback {
+  (request: ServaRequest, next: () => Promise<any>): Promise<any> | any;
+}
+
 export interface RouteCallback {
   (request: ServaRequest): Promise<any> | any;
 }
@@ -253,7 +257,8 @@ export default class App {
       if (factory) {
         switch (factory) {
           case "route":
-            callback = (callback as RouteFactory)(route);
+            let hooks;
+            [hooks, callback] = (callback as RouteFactory)(route);
             break;
 
           default:
