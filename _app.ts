@@ -444,7 +444,17 @@ function sortRoutes(a: [string, RouteEntry], b: [string, RouteEntry]): number {
   return 0;
 }
 
-function dispatch(callbacks: OnRequestCallback[], request: ServaRequest) {
+/**
+ * The hooks dispatcher.
+ *
+ * @param {OnRequestCallback[]} callbacks
+ * @param {ServaRequest} request
+ * @returns {Promise<any>}
+ */
+function dispatch(
+  callbacks: OnRequestCallback[],
+  request: ServaRequest,
+): Promise<any> {
   let i = -1;
   const next = (current = 0): Promise<any> => {
     if (current <= i) {
@@ -457,17 +467,21 @@ function dispatch(callbacks: OnRequestCallback[], request: ServaRequest) {
       cb ? cb(request, next.bind(undefined, i + 1)) : undefined,
     );
   };
-
   return next();
 }
 
+/**
+ * Transforms a route callback to a request hook callback.
+ *
+ * @param {RouteCallback} callback
+ * @returns {OnRequestCallback}
+ */
 function routeToRequestCallback(callback: RouteCallback): OnRequestCallback {
   return async function (request, next) {
     const body = callback(request);
     if (body !== undefined) {
       request.response.body = body;
     }
-
     return next();
   };
 }
