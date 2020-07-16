@@ -8,13 +8,5 @@ export default route(({ onRequest }) => {
     console.log("after");
   });
 
-  return ({ response }) => {
-    response.headers = new Headers({
-      "X-Powered-By": "Serva",
-    });
-
-    console.log("route");
-
-    return "Hello from Serva.";
-  };
+  return () => "Hello from Serva.";
 });

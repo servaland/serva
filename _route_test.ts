@@ -3,7 +3,11 @@ import createRoute from "./_route.ts";
 import { pathToRegexp } from "./deps.ts";
 
 Deno.test("basicRouteObject", () => {
-  const { params, ...route } = createRoute("GET", "/", "/routes/index.get.ts");
+  const { params, toPath, ...route } = createRoute(
+    "GET",
+    "/",
+    "/routes/index.get.ts",
+  );
 
   assertEquals(route, {
     filePath: "/routes/index.get.ts",
@@ -15,7 +19,11 @@ Deno.test("basicRouteObject", () => {
 });
 
 Deno.test("nonEndingRouteObject", () => {
-  const { params, ...route } = createRoute("GET", "/*", "/routes/_hook.ts");
+  const { params, toPath, ...route } = createRoute(
+    "GET",
+    "/*",
+    "/routes/_hook.ts",
+  );
 
   assertEquals(route, {
     filePath: "/routes/_hook.ts",

@@ -26,6 +26,8 @@ Deno.test("servaRequestObject", () => {
     method: mockRequest.method,
     params: new Map([["name", "chris"]]),
     headers: mockRequest.headers,
-    response: {},
+    response: {
+      headers: new Headers(),
+    },
   });
 });

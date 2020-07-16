@@ -2,6 +2,7 @@ import { Route } from "./_route.ts";
 import { http } from "./deps.ts";
 
 interface ServaResponse extends http.Response {
+  headers: Headers;
   body?: any; // allow routes to return anything
 }
 
@@ -29,7 +30,9 @@ export default function create(
   req: http.ServerRequest,
   route: Route,
 ): ServaRequest {
-  const response: ServaResponse = {};
+  const response: ServaResponse = {
+    headers: new Headers(),
+  };
   const proto = req.proto.split("/")[0].toLowerCase();
   const url = new URL(req.url, `${proto}://${req.headers.get("host")}`);
 

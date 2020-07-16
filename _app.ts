@@ -1,4 +1,4 @@
-import { RouteFactory } from "./factories.ts";
+import { RouteFactory, Hooksfactory } from "./factories.ts";
 import createRequest, { ServaRequest } from "./request.ts";
 import createRoute, { Route } from "./_route.ts";
 import { fs, http, path, flags } from "./deps.ts";
@@ -164,7 +164,7 @@ export default class App {
       const configFilePath = this.path("serva.config.json");
       const lstats = await Deno.lstat(configFilePath);
       if (!lstats.isFile) {
-        throw new Error();
+        throw new Error("serva.config.json is not a file");
       }
 
       // @ts-expect-error
@@ -215,6 +215,7 @@ export default class App {
     }
 
     const routes: [string, RouteEntry][] = [];
+    const routeHooks: [string, RouteEntry][] = [];
 
     for await (const entry of fs.walk(routesPath, { includeDirs: false })) {
       // ignore any non-typescript files
@@ -224,7 +225,16 @@ export default class App {
       }
 
       const relativeEntryPath = path.relative(routesPath, entry.path);
-      const method = routeMethod(relativeEntryPath, this.config);
+      let [filename, method] = nameAndMethodFromPath(
+        relativeEntryPath,
+        this.config,
+      );
+
+      // throw if dev is trying to: _hooks.get.ts
+      if (filename === "_hooks" && method !== "*") {
+        throw new Error("Hook files should not contain a methods");
+      }
+
       const urlPath = routePath(relativeEntryPath, this.config); // route information
       const route = createRoute(
         method,
@@ -243,7 +253,7 @@ export default class App {
         ({ default: callback } = await import(filePath));
         if (typeof callback !== "function") {
           throw new TypeError(
-            `${route.filePath} default export is not a callback.`,
+            `${route.filePath} default export is not a callback`,
           );
         }
       } catch (err) {
@@ -257,28 +267,53 @@ export default class App {
       let hooks: OnRequestCallback[] = [];
       if (factory) {
         switch (factory) {
+          case "hooks":
+            if (filename !== "_hooks") {
+              throw new Error("Invalid hooks filename");
+            }
+            hooks = (callback as Hooksfactory)(route);
+            routeHooks.push([route.method, [route, hooks]]);
+            continue;
+
           case "route":
             [hooks, callback] = (callback as RouteFactory)(route);
+            hooks.push(routeToRequestCallback(callback as RouteCallback));
             break;
 
           default:
             throw new Error(`Factory (${factory}) not implemented`);
         }
+      } else {
+        hooks = [routeToRequestCallback(callback as RouteCallback)];
       }
 
-      routes.push(
-        [
-          route.method,
-          [
-            route,
-            hooks.concat(routeToRequestCallback(callback as RouteCallback)),
-          ],
-        ],
-      );
+      routes.push([route.method, [route, hooks]]);
     }
 
     // sort and set routes
+    routeHooks.sort(sortRoutes);
     routes.sort(sortRoutes).forEach(([method, entry]) => {
+      // merge routeHooks into route
+      const [route, hooks] = entry;
+      const fakeUrl = route.toPath(
+        route.paramNames.length
+          ? route.paramNames.reduce((previous, name) => ({
+            ...previous,
+            [name]: "foo",
+          }), {})
+          : undefined,
+      );
+
+      const hooksToMerge = routeHooks
+        .filter(([, [hookRoute]]) => hookRoute.regexp.test(fakeUrl))
+        .map(([, entry]) => entry[1])
+        .reduce((previous, hooks_) => [
+          ...previous,
+          ...hooks_,
+        ], []);
+
+      hooks.unshift(...hooksToMerge);
+
       const entries = this.routes.get(method) || [];
       entries.push(entry);
 
@@ -337,13 +372,9 @@ export default class App {
       const { response } = request;
 
       // detect json response
-      const tryJSON = !validHttpResponseBody(response.body);
-      if (tryJSON) {
+      if (!validHttpResponseBody(response.body)) {
         response.body = JSON.stringify(response.body);
-        const headers = response.headers || (response.headers = new Headers());
-
-        // set the
-        headers.set("content-type", "application/json; charset=utf-8");
+        response.headers.set("content-type", "application/json; charset=utf-8");
       }
 
       req.respond(request.response);
@@ -352,12 +383,44 @@ export default class App {
 }
 
 /**
+ * Returns the filename and extracted method from a file path.
+ * 
+ * @example
+ *   nameAndMethodFromPath("index.ts")
+ *   // => ["index", "*"]
+ *
+ *   nameAndMethodFromPath("comments/[comment].get.ts");
+ *   // => ["[comment]", "GET"]
+ * 
+ * @param {string} filePath 
+ * @param {ServaConfig} config
+ * @returns [string, string]
+ */
+function nameAndMethodFromPath(
+  filePath: string,
+  config: ServaConfig,
+): [string, string] {
+  let name = path.basename(filePath, config.extension);
+  let method = "*";
+
+  const matched = name.match(
+    new RegExp(`.*(?=\.(${config.methods.join("|")})$)`, "i"),
+  );
+
+  if (matched) {
+    [name, method] = matched;
+  }
+
+  return [name, method.toUpperCase()];
+}
+
+/**
  * Gets the route path from a file path.
  * 
  * @example
  *   routePath("index.ts");
  *   // => "/"
- * 
+ *
  *   routePath("comments/[comment].get.ts");
  *   // => "/comments/[comment]"
  * 
@@ -366,17 +429,12 @@ export default class App {
  * @returns {string}
  */
 function routePath(filePath: string, config: ServaConfig): string {
-  let name = path.basename(filePath, config.extension);
-  const matched = name.match(
-    new RegExp(`.*(?=\.(${config.methods.join("|")})$)`, "i"),
-  );
-
-  if (matched) {
-    [name] = matched;
-  }
+  let [name] = nameAndMethodFromPath(filePath, config);
 
   if (name === "index") {
     name = "";
+  } else if (name === "_hooks") {
+    name = "*"; // single glob match for hook files
   }
 
   let base = path.dirname(filePath);
@@ -402,15 +460,7 @@ function routePath(filePath: string, config: ServaConfig): string {
  * @returns {string}
  */
 function routeMethod(filePath: string, config: ServaConfig): string {
-  const name = path.basename(filePath, config.extension);
-  const matched = name.match(
-    new RegExp(`.*(?=\.(${config.methods.join("|")})$)`, "i"),
-  );
-
-  let method = "*";
-  if (matched) {
-    [, method] = matched;
-  }
+  const [, method] = nameAndMethodFromPath(filePath, config);
 
   return method.toUpperCase();
 }
