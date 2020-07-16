@@ -1,4 +1,4 @@
-import { RouteFactory } from "./_factories.ts";
+import { RouteFactory } from "./factories.ts";
 import createRequest, { ServaRequest } from "./_request.ts";
 import createRoute, { Route } from "./_route.ts";
 import { fs, http, path, flags } from "./deps.ts";

@@ -2,7 +2,7 @@ import {
   assert,
   assertEquals,
 } from "https://deno.land/std@0.57.0/testing/asserts.ts";
-import { route } from "./_factories.ts";
+import { route } from "./factories.ts";
 import createRoute from "./_route.ts";
 
 Deno.test("routeFactory", () => {
