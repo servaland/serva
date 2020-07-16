@@ -1,6 +1,6 @@
 import { assertEquals } from "https://deno.land/std/testing/asserts.ts";
 import { http } from "./deps.ts";
-import createRequest from "./_request.ts";
+import createRequest from "./request.ts";
 import createRoute from "./_route.ts";
 
 Deno.test("servaRequestObject", () => {
