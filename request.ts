@@ -1,5 +1,6 @@
 import { Route } from "./_route.ts";
 import { http } from "./deps.ts";
+import BodyReader from "./body_reader.ts";
 
 interface ServaResponse extends http.Response {
   headers: Headers;
@@ -14,6 +15,7 @@ export interface ServaRequest {
   readonly method: string;
   readonly params: ReadonlyMap<string, string>;
   readonly headers: Headers;
+  readonly body: BodyReader;
 
   // response
   readonly response: ServaResponse;
@@ -42,6 +44,7 @@ export default function create(
     method: req.method,
     params: route.params(url.pathname),
     headers: req.headers,
+    body: new BodyReader(req),
     get response(): ServaResponse {
       return response;
     },

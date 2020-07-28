@@ -540,7 +540,7 @@ function dispatch(
  */
 function routeToRequestCallback(callback: RouteCallback): OnRequestCallback {
   return async function (request, next) {
-    const body = callback(request);
+    const body = await callback(request);
     if (body !== undefined) {
       request.response.body = body;
     }
