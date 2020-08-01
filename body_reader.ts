@@ -21,7 +21,7 @@ export default class BodyReader {
    * 
    * @returns {Promise<Uint8Array>}
    */
-  async blob() {
+  async read() {
     return await Deno.readAll(this.request.body);
   }
 
@@ -32,7 +32,7 @@ export default class BodyReader {
    */
   async text() {
     const decoder = new TextDecoder();
-    return decoder.decode(await this.blob());
+    return decoder.decode(await this.read());
   }
 
   /**
