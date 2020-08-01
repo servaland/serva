@@ -5,7 +5,7 @@ export interface RouteFactory {
   (route: Route): [OnRequestCallback[], RouteCallback];
 }
 
-export interface Hooksfactory {
+export interface HooksFactory {
   (route: Route): OnRequestCallback[];
 }
 
@@ -32,7 +32,7 @@ export function route(
   return routeFactory;
 }
 
-export function hooks(callback: (api: HooksApi) => void): Hooksfactory {
+export function hooks(callback: (api: HooksApi) => void): HooksFactory {
   function hooksFactory(route: Route): OnRequestCallback[] {
     const hooks: OnRequestCallback[] = [];
     callback({ onRequest: hooks.push.bind(hooks), route });
