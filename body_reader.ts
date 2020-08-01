@@ -1,6 +1,6 @@
 import { http } from "./deps.ts";
 
-interface JsonOptions {
+interface JSONOptions {
   reviver?: (this: any, key: string, value: any) => any;
 }
 
@@ -38,10 +38,10 @@ export default class BodyReader {
   /**
    * Reads the request body as json.
    * 
-   * @param {JsonOptions} [options]
-   * @returns {Promise<any>}
+   * @param {JSONOptions} [options]
+   * @returns {Promise<unknown>}
    */
-  async json<T = any>(options?: JsonOptions): Promise<T> {
+  async json<T = unknown>(options?: JSONOptions): Promise<T> {
     return JSON.parse(await this.text(), options && options.reviver) as T;
   }
 

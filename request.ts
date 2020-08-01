@@ -2,7 +2,7 @@ import { Route } from "./_route.ts";
 import { http } from "./deps.ts";
 import BodyReader from "./body_reader.ts";
 
-interface ServaResponse extends http.Response {
+export interface ServaResponse extends http.Response {
   headers: Headers;
   body?: any; // allow routes to return anything
 }

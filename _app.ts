@@ -1,4 +1,4 @@
-import { RouteFactory, Hooksfactory } from "./factories.ts";
+import { RouteFactory, HooksFactory } from "./factories.ts";
 import createRequest, { ServaRequest } from "./request.ts";
 import createRoute, { Route } from "./_route.ts";
 import { fs, http, path, flags } from "./deps.ts";
@@ -271,7 +271,7 @@ export default class App {
             if (filename !== "_hooks") {
               throw new Error("Invalid hooks filename");
             }
-            hooks = (callback as Hooksfactory)(route);
+            hooks = (callback as HooksFactory)(route);
             routeHooks.push([route.method, [route, hooks]]);
             continue;
 
