@@ -446,26 +446,6 @@ function routePath(filePath: string, config: ServaConfig): string {
 }
 
 /**
- * Returns the route method from a give route path.
- * 
- * @example
- *   routeMethod("index.ts");
- *   // => "*"
- * 
- *   routeMethod("/comments/[comment].get.ts")
- *   // => "GET"
- *  
- * @param {string} filePath
- * @param {ServaConfig} config
- * @returns {string}
- */
-function routeMethod(filePath: string, config: ServaConfig): string {
-  const [, method] = nameAndMethodFromPath(filePath, config);
-
-  return method.toUpperCase();
-}
-
-/**
  * Sort function for routes.
  *
  * @param {RouteEntry} a
