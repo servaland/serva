@@ -338,7 +338,8 @@ export default class App {
 
     const possibleMethods = [req.method, "*"];
     if (req.method === "HEAD") {
-      possibleMethods.splice(0, 1, "GET");
+      // HEAD, GET, *
+      possibleMethods.splice(1, 0, "GET");
     }
 
     possibleMethods.some((m) => {
@@ -358,10 +359,7 @@ export default class App {
     // not found
     // @ts-ignore
     if (!route) {
-      req.respond({
-        status: 404,
-      });
-      return;
+      return req.respond({ status: 404 });
     }
 
     const request = createRequest(req, route);
