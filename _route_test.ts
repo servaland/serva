@@ -3,23 +3,33 @@ import createRoute from "./_route.ts";
 import { pathToRegexp } from "./deps.ts";
 
 Deno.test("basicRouteObject", () => {
-  const { params, ...route } = createRoute("GET", "/", "/routes/index.get.ts");
+  const { params, toPath, ...route } = createRoute(
+    "GET",
+    "/",
+    "/routes/index.get.ts",
+  );
 
   assertEquals(route, {
     filePath: "/routes/index.get.ts",
     path: "/",
     method: "GET",
+    paramNames: [],
     regexp: pathToRegexp.pathToRegexp("/"),
   });
 });
 
 Deno.test("nonEndingRouteObject", () => {
-  const { params, ...route } = createRoute("GET", "/*", "/routes/_hook.ts");
+  const { params, toPath, ...route } = createRoute(
+    "GET",
+    "/*",
+    "/routes/_hook.ts",
+  );
 
   assertEquals(route, {
     filePath: "/routes/_hook.ts",
     path: "/*",
     method: "GET",
+    paramNames: [],
     regexp: pathToRegexp.pathToRegexp("/", [], {
       end: false,
     }),
@@ -27,12 +37,13 @@ Deno.test("nonEndingRouteObject", () => {
 });
 
 Deno.test("routeParams", () => {
-  const { params } = createRoute(
+  const { params, paramNames } = createRoute(
     "GET",
     "/[first]-[last]/comments/[comment]/view",
     "./routes/[first]-[last]/comments/[comment]/view.get.ts",
   );
 
+  assertEquals(paramNames, ["first", "last", "comment"]);
   assertEquals(
     params("/chris-turner/comments/123/view"),
     new Map([["first", "chris"], ["last", "turner"], ["comment", "123"]]),

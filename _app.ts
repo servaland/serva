@@ -1,6 +1,11 @@
-import createRequest, { ServaRequest } from "./_request.ts";
+import { RouteFactory, HooksFactory } from "./factories.ts";
+import createRequest, { ServaRequest } from "./request.ts";
 import createRoute, { Route } from "./_route.ts";
 import { fs, http, path, flags } from "./deps.ts";
+
+export interface OnRequestCallback {
+  (request: ServaRequest, next: () => Promise<any>): Promise<any> | any;
+}
 
 export interface RouteCallback {
   (request: ServaRequest): Promise<any> | any;
@@ -21,7 +26,7 @@ const DEFAULT_CONFIG = Object.freeze({
   methods: "get|post|put|delete|patch".split("|"),
 });
 
-type RouteEntry = [Route, RouteCallback];
+type RouteEntry = [Route, OnRequestCallback[]];
 type RoutesStruct = Map<string, RouteEntry[]>;
 
 export default class App {
@@ -159,7 +164,7 @@ export default class App {
       const configFilePath = this.path("serva.config.json");
       const lstats = await Deno.lstat(configFilePath);
       if (!lstats.isFile) {
-        throw new Error();
+        throw new Error("serva.config.json is not a file");
       }
 
       // @ts-expect-error
@@ -210,16 +215,26 @@ export default class App {
     }
 
     const routes: [string, RouteEntry][] = [];
+    const routeHooks: [string, RouteEntry][] = [];
 
-    for await (const entry of fs.walk(routesPath)) {
-      // ignore directories and any non-typescript files
+    for await (const entry of fs.walk(routesPath, { includeDirs: false })) {
+      // ignore any non-typescript files
       // todo: support for javascript
-      if (entry.isDirectory || !entry.name.endsWith(this.config.extension)) {
+      if (!entry.name.endsWith(this.config.extension)) {
         continue;
       }
 
       const relativeEntryPath = path.relative(routesPath, entry.path);
-      const method = routeMethod(relativeEntryPath, this.config);
+      let [filename, method] = nameAndMethodFromPath(
+        relativeEntryPath,
+        this.config,
+      );
+
+      // throw if dev is trying to: _hooks.get.ts
+      if (filename === "_hooks" && method !== "*") {
+        throw new Error("Hook files should not contain a methods");
+      }
+
       const urlPath = routePath(relativeEntryPath, this.config); // route information
       const route = createRoute(
         method,
@@ -228,7 +243,7 @@ export default class App {
       );
 
       // register route
-      let callback: RouteCallback;
+      let callback: unknown;
       try {
         let filePath = `file://${entry.path}`;
         if (remount) {
@@ -238,7 +253,7 @@ export default class App {
         ({ default: callback } = await import(filePath));
         if (typeof callback !== "function") {
           throw new TypeError(
-            `${route.filePath} default export is not a callback.`,
+            `${route.filePath} default export is not a callback`,
           );
         }
       } catch (err) {
@@ -246,16 +261,59 @@ export default class App {
         continue;
       }
 
-      routes.push(
-        [
-          route.method,
-          [route, callback!],
-        ],
-      );
+      // check if the export was a factory
+      // @ts-ignore https://github.com/Microsoft/TypeScript/issues/1863
+      const factory = callback[Symbol.for("serva_factory")];
+      let hooks: OnRequestCallback[] = [];
+      if (factory) {
+        switch (factory) {
+          case "hooks":
+            if (filename !== "_hooks") {
+              throw new Error("Invalid hooks filename");
+            }
+            hooks = (callback as HooksFactory)(route);
+            routeHooks.push([route.method, [route, hooks]]);
+            continue;
+
+          case "route":
+            [hooks, callback] = (callback as RouteFactory)(route);
+            hooks.push(routeToRequestCallback(callback as RouteCallback));
+            break;
+
+          default:
+            throw new Error(`Factory (${factory}) not implemented`);
+        }
+      } else {
+        hooks = [routeToRequestCallback(callback as RouteCallback)];
+      }
+
+      routes.push([route.method, [route, hooks]]);
     }
 
     // sort and set routes
+    routeHooks.sort(sortRoutes);
     routes.sort(sortRoutes).forEach(([method, entry]) => {
+      // merge routeHooks into route
+      const [route, hooks] = entry;
+      const fakeUrl = route.toPath(
+        route.paramNames.length
+          ? route.paramNames.reduce((previous, name) => ({
+            ...previous,
+            [name]: "foo",
+          }), {})
+          : undefined,
+      );
+
+      const hooksToMerge = routeHooks
+        .filter(([, [hookRoute]]) => hookRoute.regexp.test(fakeUrl))
+        .map(([, entry]) => entry[1])
+        .reduce((previous, hooks_) => [
+          ...previous,
+          ...hooks_,
+        ], []);
+
+      hooks.unshift(...hooksToMerge);
+
       const entries = this.routes.get(method) || [];
       entries.push(entry);
 
@@ -275,21 +333,22 @@ export default class App {
   private async handleRequest(req: http.ServerRequest): Promise<void> {
     // find a matching route
     let route: Route;
-    let callback: RouteCallback;
+    let callbacks: OnRequestCallback[] = [];
     const { pathname } = new URL(req.url, "https://serva.land");
 
     const possibleMethods = [req.method, "*"];
     if (req.method === "HEAD") {
-      possibleMethods.splice(0, 1, "GET");
+      // HEAD, GET, *
+      possibleMethods.splice(1, 0, "GET");
     }
 
     possibleMethods.some((m) => {
       const entries = this.routes.get(m);
       if (entries) {
-        return entries.some(([r, cb]) => {
+        return entries.some(([r, cbs]) => {
           if (r.regexp.test(pathname)) {
             route = r;
-            callback = cb;
+            callbacks = cbs;
             // route found
             return true;
           }
@@ -300,25 +359,57 @@ export default class App {
     // not found
     // @ts-ignore
     if (!route) {
-      req.respond({
-        status: 404,
-      });
-      return;
+      return req.respond({ status: 404 });
     }
 
     const request = createRequest(req, route);
-    const body = await callback!(request);
-
-    // allow return values to set the body
-    if (body !== undefined) {
-      request.response.body = body;
-    }
+    await dispatch(callbacks, request);
 
     // if nobody has responded, send the current request's response
     if (request.httpRequest.w.usedBufferBytes === 0) {
+      const { response } = request;
+
+      // detect json response
+      if (!validHttpResponseBody(response.body)) {
+        response.body = JSON.stringify(response.body);
+        response.headers.set("content-type", "application/json; charset=utf-8");
+      }
+
       req.respond(request.response);
     }
   }
+}
+
+/**
+ * Returns the filename and extracted method from a file path.
+ * 
+ * @example
+ *   nameAndMethodFromPath("index.ts")
+ *   // => ["index", "*"]
+ *
+ *   nameAndMethodFromPath("comments/[comment].get.ts");
+ *   // => ["[comment]", "GET"]
+ * 
+ * @param {string} filePath 
+ * @param {ServaConfig} config
+ * @returns [string, string]
+ */
+function nameAndMethodFromPath(
+  filePath: string,
+  config: ServaConfig,
+): [string, string] {
+  let name = path.basename(filePath, config.extension);
+  let method = "*";
+
+  const matched = name.match(
+    new RegExp(`.*(?=\.(${config.methods.join("|")})$)`, "i"),
+  );
+
+  if (matched) {
+    [name, method] = matched;
+  }
+
+  return [name, method.toUpperCase()];
 }
 
 /**
@@ -327,7 +418,7 @@ export default class App {
  * @example
  *   routePath("index.ts");
  *   // => "/"
- * 
+ *
  *   routePath("comments/[comment].get.ts");
  *   // => "/comments/[comment]"
  * 
@@ -336,17 +427,12 @@ export default class App {
  * @returns {string}
  */
 function routePath(filePath: string, config: ServaConfig): string {
-  let name = path.basename(filePath, config.extension);
-  const matched = name.match(
-    new RegExp(`.*(?=\.(${config.methods.join("|")})$)`, "i"),
-  );
-
-  if (matched) {
-    [name] = matched;
-  }
+  let [name] = nameAndMethodFromPath(filePath, config);
 
   if (name === "index") {
     name = "";
+  } else if (name === "_hooks") {
+    name = "*"; // single glob match for hook files
   }
 
   let base = path.dirname(filePath);
@@ -355,34 +441,6 @@ function routePath(filePath: string, config: ServaConfig): string {
   }
 
   return "/" + (base ? path.join(base, name) : name);
-}
-
-/**
- * Returns the route method from a give route path.
- * 
- * @example
- *   routeMethod("index.ts");
- *   // => "*"
- * 
- *   routeMethod("/comments/[comment].get.ts")
- *   // => "GET"
- *  
- * @param {string} filePath
- * @param {ServaConfig} config
- * @returns {string}
- */
-function routeMethod(filePath: string, config: ServaConfig): string {
-  const name = path.basename(filePath, config.extension);
-  const matched = name.match(
-    new RegExp(`.*(?=\.(${config.methods.join("|")})$)`, "i"),
-  );
-
-  let method = "*";
-  if (matched) {
-    [, method] = matched;
-  }
-
-  return method.toUpperCase();
 }
 
 /**
@@ -424,4 +482,67 @@ function sortRoutes(a: [string, RouteEntry], b: [string, RouteEntry]): number {
   }
 
   return 0;
+}
+
+/**
+ * The hooks dispatcher.
+ *
+ * @param {OnRequestCallback[]} callbacks
+ * @param {ServaRequest} request
+ * @returns {Promise<any>}
+ */
+function dispatch(
+  callbacks: OnRequestCallback[],
+  request: ServaRequest,
+): Promise<any> {
+  let i = -1;
+  const next = (current = 0): Promise<any> => {
+    if (current <= i) {
+      throw new Error("next() already called");
+    }
+
+    const cb = callbacks[i = current];
+
+    return Promise.resolve(
+      cb ? cb(request, next.bind(undefined, i + 1)) : undefined,
+    );
+  };
+  return next();
+}
+
+/**
+ * Transforms a route callback to a request hook callback.
+ *
+ * @param {RouteCallback} callback
+ * @returns {OnRequestCallback}
+ */
+function routeToRequestCallback(callback: RouteCallback): OnRequestCallback {
+  return async function (request, next) {
+    const body = await callback(request);
+    if (body !== undefined) {
+      request.response.body = body;
+    }
+    return next();
+  };
+}
+
+/**
+ * Chek if a given body is a valid Http response type.
+ *
+ * @param {any} body
+ * @returns {boolean}
+ */
+function validHttpResponseBody(body: any): boolean {
+  switch (typeof body) {
+    case "undefined":
+    case "string":
+      return true;
+
+    case "object":
+      return body &&
+        (body instanceof Uint8Array || typeof body.read === "function");
+
+    default:
+      return false;
+  }
 }

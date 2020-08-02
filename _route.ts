@@ -5,7 +5,9 @@ export interface Route {
   readonly method: string;
   readonly path: string;
   readonly regexp: RegExp;
+  readonly paramNames: Array<string | number>;
   params: (path: string) => Map<string, string>;
+  toPath: (params?: object) => string;
 }
 
 /**
@@ -29,16 +31,18 @@ export default function create(
   });
   const matcher = pathToRegexp.match(cleaned);
 
-  return {
+  return Object.freeze({
     filePath,
     path,
     method,
     regexp,
+    paramNames: keys.map((k) => k.name),
+    toPath: pathToRegexp.compile(cleaned, { encode: encodeURIComponent }),
     params(path: string): Map<string, string> {
       const matches = matcher(path);
       return new Map(matches ? Object.entries(matches.params) : []);
     },
-  };
+  });
 }
 
 /**

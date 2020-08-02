@@ -1,5 +1,11 @@
 import { Route } from "./_route.ts";
 import { http } from "./deps.ts";
+import BodyReader from "./body_reader.ts";
+
+export interface ServaResponse extends http.Response {
+  headers: Headers;
+  body?: any; // allow routes to return anything
+}
 
 export interface ServaRequest {
   readonly httpRequest: http.ServerRequest;
@@ -9,9 +15,10 @@ export interface ServaRequest {
   readonly method: string;
   readonly params: ReadonlyMap<string, string>;
   readonly headers: Headers;
+  readonly body: BodyReader;
 
   // response
-  readonly response: http.Response;
+  readonly response: ServaResponse;
 }
 
 /**
@@ -25,7 +32,9 @@ export default function create(
   req: http.ServerRequest,
   route: Route,
 ): ServaRequest {
-  const response: http.Response = {};
+  const response: ServaResponse = {
+    headers: new Headers(),
+  };
   const proto = req.proto.split("/")[0].toLowerCase();
   const url = new URL(req.url, `${proto}://${req.headers.get("host")}`);
 
@@ -35,7 +44,8 @@ export default function create(
     method: req.method,
     params: route.params(url.pathname),
     headers: req.headers,
-    get response(): http.Response {
+    body: new BodyReader(req),
+    get response(): ServaResponse {
       return response;
     },
   };
