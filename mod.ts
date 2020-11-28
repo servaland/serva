@@ -1,2 +1,1 @@
-export { ServaRequest } from "./_request.ts";
-export { RouteCallback, ServaConfig } from "./_app.ts";
+export { RequestHandler } from "./_app.ts";

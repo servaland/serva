@@ -1,5 +1,5 @@
-import App from "./_app.ts";
+import { main } from "./_app.ts";
 
 if (import.meta.main) {
-  App.main(Deno.args);
+  main(Deno.args);
 }
