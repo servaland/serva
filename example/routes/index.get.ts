@@ -1,9 +1,5 @@
 import { RequestHandler } from "../../_app.ts";
 
-const index: RequestHandler = (request) => {
-  request.respond({
-    body: "Hello, World!",
-  });
-};
+const index: RequestHandler = () => "Hello, World!";
 
 export default index;

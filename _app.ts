@@ -6,9 +6,11 @@ interface Options {
   js: boolean;
 }
 
+type ResponseBody = http.Response["body"] | void;
+
 export type RequestHandler = (
   request: http.ServerRequest
-) => Promise<void> | void;
+) => Promise<ResponseBody> | ResponseBody;
 
 interface Route {
   path: string;
@@ -106,7 +108,18 @@ export async function main(argv: string[]) {
     );
 
     if (route) {
-      route.handler(request);
+      const result = route.handler(request);
+      // did the handler respond?
+      if (request.w.usedBufferBytes === 0) {
+        Promise.resolve(result).then((body) => {
+          const response: http.Response = {};
+          if (typeof response !== "undefined") {
+            response.body = body as http.Response["body"];
+          }
+          // respond
+          request.respond(response);
+        });
+      }
     } else {
       request.respond({
         status: 404,
