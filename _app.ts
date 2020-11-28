@@ -12,6 +12,7 @@ export type RequestHandler = (
 
 interface Route {
   path: string;
+  methods: string[];
   handler: RequestHandler;
 }
 
@@ -20,6 +21,11 @@ const defaultFlags: Options = {
   hostname: "0.0.0.0",
   js: false,
 };
+
+const filenameMethods = ["get", "post", "delete", "put", "patch"];
+const filenameMethodPattern = new RegExp(
+  `(\\.(${filenameMethods.join("|")}))$`
+);
 
 export async function main(argv: string[]) {
   const { _: args, host: _, ...rest } = flags.parse(argv, {
@@ -53,8 +59,17 @@ export async function main(argv: string[]) {
   const routes: Route[] = [];
   for await (const entry of routesReader) {
     let routePath = "/" + path.relative(routesPath, path.dirname(entry.path));
+    let methods: string[] = filenameMethods;
 
     let basename = path.basename(entry.path, fileExtension);
+
+    // "/index.get" => "/index"
+    const matchedMethod = basename.match(filenameMethodPattern);
+    if (matchedMethod !== null) {
+      methods = [matchedMethod[2]];
+      basename = basename.replace(filenameMethodPattern, "");
+    }
+
     // "/index" => "/"
     if (basename !== "index") {
       const slash = routePath.substr(-1) !== "/" ? "/" : "";
@@ -71,6 +86,7 @@ export async function main(argv: string[]) {
     }
 
     routes.push({
+      methods,
       path: routePath,
       handler: handler as RequestHandler,
     });
@@ -83,7 +99,12 @@ export async function main(argv: string[]) {
 
   // listen...
   for await (const request of server) {
-    const route = routes.find((route) => route.path === request.url);
+    const route = routes.find(
+      (route) =>
+        route.path === request.url &&
+        route.methods.includes(request.method.toLowerCase())
+    );
+
     if (route) {
       route.handler(request);
     } else {
