@@ -94,6 +94,8 @@ export async function main(argv: string[]) {
     });
   }
 
+  routes.sort(sortRoutes);
+
   const server = http.serve({
     port,
     hostname,
@@ -135,4 +137,19 @@ function toAbsolutePath(givenPath: string = "."): string {
   }
 
   return path.resolve(Deno.cwd(), givenPath);
+}
+
+function sortRoutes(a: Route, b: Route): number {
+  const { path: pathA, methods: methodsA } = a;
+  const { path: pathB, methods: methodsB } = b;
+
+  if (pathA !== pathB) {
+    return pathA.split("/").length - pathB.split("/").length;
+  }
+
+  if (methodsA.length !== methodsB.length) {
+    return methodsA.length - methodsB.length;
+  }
+
+  return 0;
 }
