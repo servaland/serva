@@ -14,6 +14,7 @@ export type RequestHandler<P extends object = object> = (
 ) => Promise<ResponseBody> | ResponseBody;
 
 interface Route {
+  file: string;
   path: string;
   methods: string[];
   match: pathToRegexp.MatchFunction;
@@ -26,7 +27,7 @@ const defaultFlags: Options = {
   js: false,
 };
 
-const filenameMethods = ["get", "post", "delete", "put", "patch"];
+const filenameMethods = ["delete", "get", "patch", "post", "put"];
 const filenameMethodPattern = new RegExp(
   `(\\.(${filenameMethods.join("|")}))$`
 );
@@ -62,6 +63,7 @@ export async function main(
   // read routes directory
   const routes: Route[] = [];
   for await (const entry of routesReader) {
+    const file = path.relative(appPath, entry.path);
     let routePath = "/" + path.relative(routesPath, path.dirname(entry.path));
     let methods: string[] = filenameMethods;
 
@@ -91,7 +93,18 @@ export async function main(
       throw new Error(`Invalid request handler: ${entry.path}`);
     }
 
+    // check for conflicts
+    routes.forEach((route) => {
+      if (
+        route.path === routePath &&
+        methods.join(",") === filenameMethods.join(",")
+      ) {
+        throw Error(`route conflict: "${file}" with "${route.file}".`);
+      }
+    });
+
     routes.push({
+      file,
       methods,
       path: routePath,
       match: pathToRegexp.match(pathToRegexpPath(routePath)),
