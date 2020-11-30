@@ -1,1 +1,1 @@
-export { RequestHandler } from "./_app.ts";
+export type { RequestHandler } from "./_app.ts";
