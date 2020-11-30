@@ -275,14 +275,13 @@ function sortRoutes(a: Route, b: Route): number {
         continue;
       }
 
-      // if a single placeholder then its highest code wins
-      if (codeA < 4 && codeB > 4) {
-        return 1;
-      } else if (codeA > 4 && codeB < 4) {
-        return -1;
+      // if a single placeholder then its highest code wins as higher codes are
+      // statics
+      if ((codeA < 4 && codeB > 4) || (codeA > 4 && codeB < 4)) {
+        return codeB - codeA;
       }
 
-      // lowest code wins
+      // lowest placeholder wins
       return codeA - codeB;
     }
   }
