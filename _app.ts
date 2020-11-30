@@ -65,6 +65,8 @@ export async function main(
     let routePath = "/" + path.relative(routesPath, path.dirname(entry.path));
     let methods: string[] = filenameMethods;
 
+    routePath = routePath.replace(new RegExp(path.SEP_PATTERN, "g"), "/");
+
     let basename = path.basename(entry.path, fileExtension);
 
     // "/index.get" => "/index"
@@ -99,6 +101,21 @@ export async function main(
 
   routes.sort(sortRoutes);
 
+  const groupedRoutes: { [method: string]: Route[] } = filenameMethods.reduce(
+    (group, method) => ({
+      ...group,
+      [method]: [],
+    }),
+    {}
+  );
+
+  // group the routes by their method
+  routes.forEach((route) => {
+    route.methods.forEach((method) => {
+      groupedRoutes[method].push(route);
+    });
+  });
+
   const server = http.serve({
     port,
     hostname,
@@ -109,11 +126,10 @@ export async function main(
     for await (const request of server) {
       const url = new URL(request.url, "http://serva.land");
       let match: pathToRegexp.Match | undefined;
-      const route = routes.find((entry) => {
-        if (entry.methods.includes(request.method.toLowerCase())) {
-          match = entry.match(url.pathname);
-          return match !== false;
-        }
+      const availableRoutes = groupedRoutes[request.method.toLowerCase()];
+      const route = availableRoutes.find((entry) => {
+        match = entry.match(url.pathname);
+        return match !== false;
       });
 
       if (route && match) {
@@ -150,16 +166,112 @@ function toAbsolutePath(givenPath: string = "."): string {
   return path.resolve(Deno.cwd(), givenPath);
 }
 
+const SEG_PARAM = "\u0000";
+const SEG_PARAM_SPREAD = "\u0001";
+const SEG_OPTIONAL = "\u0002";
+const SEG_OPTIONAL_SPREAD = "\u0003";
+
+const PARAM_NAME_PATTERN = "[a-z][a-z0-9_\\-.]*";
+
+function pathToPlaceholder(givenPath: string): string {
+  return givenPath
+    .replace(
+      new RegExp(`\\[{2}\\.{3}${PARAM_NAME_PATTERN}\\]{2}`, "ig"),
+      SEG_OPTIONAL_SPREAD
+    )
+    .replace(
+      new RegExp(`\\[{2}${PARAM_NAME_PATTERN}\\]{2}`, "ig"),
+      SEG_OPTIONAL
+    )
+    .replace(
+      new RegExp(`\\[\\.{3}${PARAM_NAME_PATTERN}\\]`, "ig"),
+      SEG_PARAM_SPREAD
+    )
+    .replace(new RegExp(`\\[${PARAM_NAME_PATTERN}\\]`, "ig"), SEG_PARAM);
+}
+
 function sortRoutes(a: Route, b: Route): number {
   const { path: pathA, methods: methodsA } = a;
   const { path: pathB, methods: methodsB } = b;
 
-  if (pathA !== pathB) {
-    return pathA.split("/").length - pathB.split("/").length;
+  // same paths, check the methods
+  if (pathA === pathB) {
+    return methodsA.length - methodsB.length;
   }
 
-  if (methodsA.length !== methodsB.length) {
-    return methodsA.length - methodsB.length;
+  // paths into segments
+  const segmentsA = pathA.split("/").filter(Boolean);
+  const segmentsB = pathB.split("/").filter(Boolean);
+
+  // sort paths with more segments higher because they have a more defined path
+  if (segmentsA.length !== segmentsB.length) {
+    return segmentsA.length - segmentsB.length;
+  }
+
+  // iterate over ALL available segments for the path with the most "winners".
+  for (
+    let i = 0, l = Math.max(segmentsA.length, segmentsB.length);
+    i < l;
+    ++i
+  ) {
+    const segA = segmentsA[i];
+    const segB = segmentsB[i];
+
+    // equal segments, check next
+    if (segA === segB) {
+      continue;
+    }
+
+    // find [params]
+    const matchA = segA.match(/\[{1,2}(\.{3})?[a-z][a-z0-9\-_.]*\]{1,2}/g);
+    const matchB = segB.match(/\[{1,2}(\.{3})?[a-z][a-z0-9\-_.]*\]{1,2}/g);
+
+    // no params, paths will never cross so we fallback
+    if (matchA === matchB) {
+      break;
+    } else if (!matchA || !matchB) {
+      // or only one matched, so the other is a static and wins
+      return matchA ? 1 : -1;
+    }
+
+    // substitute params with placeholders
+    const placeholderA = pathToPlaceholder(segA);
+    const placeholderB = pathToPlaceholder(segB);
+
+    // matching placeholders? this is possible if the developer does the
+    // following:
+    //     /[foo]
+    //     /[bar]
+    if (placeholderA === placeholderB) {
+      // theres nothing much we can do here but continue
+      // todo: warn the developer of conflicting routes?
+      continue;
+    }
+
+    // iterate each char and find the "winner"
+    for (
+      let j = 0, m = Math.min(placeholderA.length, placeholderB.length);
+      j < m;
+      ++j
+    ) {
+      const codeA = placeholderA.charAt(j).charCodeAt(0);
+      const codeB = placeholderB.charAt(j).charCodeAt(0);
+
+      // same character, next char
+      if (codeA === codeB) {
+        continue;
+      }
+
+      // if a single placeholder then its highest code wins
+      if (codeA < 4 && codeB > 4) {
+        return 1;
+      } else if (codeA > 4 && codeB < 4) {
+        return -1;
+      }
+
+      // lowest code wins
+      return codeA - codeB;
+    }
   }
 
   return 0;

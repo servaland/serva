@@ -1,11 +1,5 @@
 import { RequestHandler } from "../../_app.ts";
 
-const index: RequestHandler = (_, params) => {
-  return new Promise((res) => {
-    setTimeout(() => {
-      res("Postman Pat!");
-    }, 500);
-  });
-};
+const index: RequestHandler = () => "index.post";
 
 export default index;

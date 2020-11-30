@@ -1,5 +1,5 @@
 import { RequestHandler } from "../../_app.ts";
 
-const index: RequestHandler = () => "index.get";
+const index: RequestHandler = () => "index";
 
 export default index;
