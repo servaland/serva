@@ -1,5 +1,7 @@
+export * as asserts from "https://deno.land/std@0.79.0/testing/asserts.ts";
 export * as flags from "https://deno.land/std@0.79.0/flags/mod.ts";
 
+// pluck walk from fs as it contains unstable errors
 import { walk } from "https://deno.land/std@0.79.0/fs/walk.ts";
 export const fs = {
   walk,

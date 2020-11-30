@@ -8,9 +8,9 @@ interface Options {
 
 type ResponseBody = http.Response["body"] | void;
 
-export type RequestHandler = (
+export type RequestHandler<P extends object = object> = (
   request: http.ServerRequest,
-  params: object
+  params: P
 ) => Promise<ResponseBody> | ResponseBody;
 
 interface Route {
@@ -31,7 +31,9 @@ const filenameMethodPattern = new RegExp(
   `(\\.(${filenameMethods.join("|")}))$`
 );
 
-export async function main(argv: string[]) {
+export async function main(
+  argv: string[]
+): Promise<[http.Server, Promise<void>]> {
   const { _: args, host: _, ...rest } = flags.parse(argv, {
     boolean: ["js"],
     alias: {
@@ -45,8 +47,6 @@ export async function main(argv: string[]) {
       return Object.keys(defaultFlags).includes(flag);
     },
   });
-
-  console.log(rest);
 
   const { hostname, port, js } = rest as Options;
   const appPath = toAbsolutePath(args[0] as string | undefined);
@@ -104,38 +104,42 @@ export async function main(argv: string[]) {
     hostname,
   });
 
-  // listen...
-  for await (const request of server) {
-    const url = new URL(request.url, "http://serva.land");
-    let match: pathToRegexp.Match | undefined;
-    const route = routes.find((entry) => {
-      if (entry.methods.includes(request.method.toLowerCase())) {
-        match = entry.match(url.pathname);
-        return match !== false;
-      }
-    });
+  const listen = async () => {
+    // listen...
+    for await (const request of server) {
+      const url = new URL(request.url, "http://serva.land");
+      let match: pathToRegexp.Match | undefined;
+      const route = routes.find((entry) => {
+        if (entry.methods.includes(request.method.toLowerCase())) {
+          match = entry.match(url.pathname);
+          return match !== false;
+        }
+      });
 
-    if (route && match) {
-      const { params } = match;
-      const result = route.handler(request, params);
-      // did the handler respond?
-      if (request.w.usedBufferBytes === 0) {
-        Promise.resolve(result).then((body) => {
-          const response: http.Response = {};
-          if (typeof response !== "undefined") {
-            response.body = body as http.Response["body"];
-          }
-          // respond
-          request.respond(response);
+      if (route && match) {
+        const { params } = match;
+        const result = route.handler(request, params);
+        // did the handler respond?
+        if (request.w.usedBufferBytes === 0) {
+          Promise.resolve(result).then((body) => {
+            const response: http.Response = {};
+            if (typeof response !== "undefined") {
+              response.body = body as http.Response["body"];
+            }
+            // respond
+            request.respond(response);
+          });
+        }
+      } else {
+        request.respond({
+          status: 404,
+          body: `${request.url} not found.`,
         });
       }
-    } else {
-      request.respond({
-        status: 404,
-        body: `${request.url} not found.`,
-      });
     }
-  }
+  };
+
+  return [server, listen()];
 }
 
 function toAbsolutePath(givenPath: string = "."): string {
