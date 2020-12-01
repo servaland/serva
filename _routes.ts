@@ -1,4 +1,4 @@
-import { http, path, pathToRegexp } from "./deps.ts";
+import { fs, http, path, pathToRegexp } from "./deps.ts";
 
 type ResponseBody = http.Response["body"] | void;
 
@@ -15,7 +15,7 @@ export enum Method {
   PUT = "PUT",
 }
 
-const fileMethods: Method[] = [];
+export const fileMethods: Method[] = [];
 for (const method in Method) {
   fileMethods.push(method as Method);
 }
@@ -26,6 +26,53 @@ export interface Route {
   path: string;
   methods: Method[];
   match: pathToRegexp.MatchFunction;
+  // url: pathToRegexp.PathFunction;
+}
+
+/**
+ * Read a directory and create routes for its contents.
+ *
+ * @example
+ *   await readDir("/opt/app/routes", ".ts");
+ *   // => [{}, {}, {}]
+ *
+ * @param {string} dir
+ * @param {string} ext
+ * @return {Promise<Route[]>}
+ */
+export async function readDir(dir: string, ext: string): Promise<Route[]> {
+  const routes: Route[] = [];
+  for await (const route of walkDir(dir, ext)) {
+    routes.push(route);
+  }
+
+  routes.sort(sort);
+
+  return routes;
+}
+
+/**
+ * Async generator that walks a directory and creates routes from each entry.
+ *
+ * @example
+ *   for await (const route of walkDir("/opt/app/routes")) {
+ *     // register route
+ *   }
+ *
+ * @param {string} dir
+ * @param {string} ext
+ * @returns {AsyncIterableIterator<Route>}
+ */
+async function* walkDir(
+  dir: string,
+  ext: string
+): AsyncIterableIterator<Route> {
+  for await (const entry of fs.walk(dir, {
+    includeDirs: false,
+    exts: [ext],
+  })) {
+    yield fromFile(entry.path, dir, ext);
+  }
 }
 
 /**
@@ -47,13 +94,14 @@ function fromFile(
   ext: string = path.extname(file)
 ): Route {
   const [path_, methods] = extractPathMethods(path.relative(base, file), ext);
-  const match = pathToRegexp.match(convertPath(path_));
+  const regexpPath = convertPath(path_);
 
   return {
     file,
     methods,
     path: path_,
-    match,
+    match: pathToRegexp.match(regexpPath),
+    // url: pathToRegexp.compile(regexpPath, { encode: encodeURIComponent }),
   };
 }
 
@@ -70,12 +118,17 @@ function fromFile(
  * @returns {[string, Methods[]]}
  */
 function extractPathMethods(file: string, ext: string): [string, Method[]] {
+  const dirname = path.dirname(file);
   let path_ =
-    "/" + path.dirname(file).replaceAll(new RegExp(path.SEP_PATTERN, "g"), "/");
+    "/" +
+    (dirname !== "." ? path.dirname(file) : "").replaceAll(
+      new RegExp(path.SEP_PATTERN, "g"),
+      "/"
+    );
 
   const base = extractBase(file, ext);
   if (base) {
-    path_ += `/${base}`;
+    path_ += `${path_ !== "/" ? "/" : ""}${base}`;
   }
 
   return [path_, extractMethods(path.basename(file, ext))];
@@ -123,7 +176,11 @@ function extractMethods(file: string): Method[] {
   return fileMethods.concat();
 }
 
-const paramsPattern = /(\[{1,2})(\.{3})?([a-z][a-z0-9\-_.]*)(\]{1,2})/gi;
+const paramNamePatternString = "[a-z][a-z0-9_\\-.]*";
+const paramsPattern = new RegExp(
+  `(\\[{1,2})(\\.{3})?(${paramNamePatternString})(\\]{1,2})`,
+  "gi"
+);
 
 /**
  * Converts a file path into a path-to-regexp path.
@@ -194,4 +251,126 @@ function asParam(
   }
 
   return `:${name}${modifier}`;
+}
+
+/**
+ * A very complex sorting algorithm for routes.
+ *
+ * @todo document this
+ *
+ * @private
+ * @param {Route} a
+ * @param {Route} b
+ * @returns {number}
+ */
+function sort(a: Route, b: Route): number {
+  const { path: pathA, methods: methodsA } = a;
+  const { path: pathB, methods: methodsB } = b;
+
+  // same paths, check the methods
+  if (pathA === pathB) {
+    return methodsA.length - methodsB.length;
+  }
+
+  // paths into segments
+  const segmentsA = pathA.split("/").filter(Boolean);
+  const segmentsB = pathB.split("/").filter(Boolean);
+
+  // sort paths with more segments higher because they have a more defined path
+  if (segmentsA.length !== segmentsB.length) {
+    return segmentsA.length - segmentsB.length;
+  }
+
+  // iterate over ALL available segments for the path with the most "winners".
+  for (
+    let i = 0, l = Math.max(segmentsA.length, segmentsB.length);
+    i < l;
+    ++i
+  ) {
+    const segA = segmentsA[i];
+    const segB = segmentsB[i];
+
+    // equal segments, check next
+    if (segA === segB) {
+      continue;
+    }
+
+    // find [params]
+    const matchA = segA.match(paramsPattern);
+    const matchB = segB.match(paramsPattern);
+
+    // no params, paths will never cross so we fallback
+    if (matchA === matchB) {
+      break;
+    } else if (!matchA || !matchB) {
+      // or only one matched, so the other is a static and wins
+      return matchA ? 1 : -1;
+    }
+
+    // substitute params with placeholders
+    const markerA = paramMarker(segA);
+    const markerB = paramMarker(segB);
+
+    // matching placeholders? this is possible if the developer does the
+    // following:
+    //     /[foo]
+    //     /[bar]
+    if (markerA === markerB) {
+      // theres nothing much we can do here but continue
+      // todo: warn the developer of conflicting routes?
+      continue;
+    }
+
+    // iterate each char and find the "winner"
+    for (let j = 0, m = Math.min(markerA.length, markerB.length); j < m; ++j) {
+      const codeA = markerA.charCodeAt(j);
+      const codeB = markerB.charCodeAt(j);
+
+      // same character, next char
+      if (codeA === codeB) {
+        continue;
+      }
+
+      // the longer segment wins
+      const nanA = Number.isNaN(codeA);
+      if (nanA || Number.isNaN(codeB)) {
+        return nanA ? 1 : -1;
+      }
+
+      // if a single placeholder then its highest code wins as higher codes are
+      // statics
+      if ((codeA < 4 && codeB > 4) || (codeA > 4 && codeB < 4)) {
+        return codeB - codeA;
+      }
+
+      // lowest placeholder wins
+      return codeA - codeB;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Puts null character markers in replace of params. A utility function for
+ * sorting routes.
+ *
+ * @param {string} file
+ * @returns {string}
+ */
+function paramMarker(file: string): string {
+  return file
+    .replace(
+      new RegExp(`\\[{2}\\.{3}${paramNamePatternString}\\]{2}`, "ig"),
+      "\u0003"
+    )
+    .replace(
+      new RegExp(`\\[{2}${paramNamePatternString}\\]{2}`, "ig"),
+      "\u0002"
+    )
+    .replace(
+      new RegExp(`\\[\\.{3}${paramNamePatternString}\\]`, "ig"),
+      "\u0001"
+    )
+    .replace(new RegExp(`\\[${paramNamePatternString}\\]`, "ig"), "\u0000");
 }
