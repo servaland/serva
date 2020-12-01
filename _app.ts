@@ -267,12 +267,18 @@ function sortRoutes(a: Route, b: Route): number {
       j < m;
       ++j
     ) {
-      const codeA = placeholderA.charAt(j).charCodeAt(0);
-      const codeB = placeholderB.charAt(j).charCodeAt(0);
+      const codeA = placeholderA.charCodeAt(j);
+      const codeB = placeholderB.charCodeAt(j);
 
       // same character, next char
       if (codeA === codeB) {
         continue;
+      }
+
+      // the longer segment wins
+      const nanA = Number.isNaN(codeA);
+      if (nanA || Number.isNaN(codeB)) {
+        return nanA ? 1 : -1;
       }
 
       // if a single placeholder then its highest code wins as higher codes are
